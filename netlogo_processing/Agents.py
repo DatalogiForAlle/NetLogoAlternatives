@@ -32,8 +32,8 @@ class Agent():
         return ((self.x-other_x)**2 + (self.y-other_y)**2)**0.5
 
     def currentTile(self):
-        x = floor(50 * self.x / 400)
-        y = floor(50 * self.y / 400)
+        x = floor(len(self.model.tiles) * self.x / 400)
+        y = floor(len(self.model.tiles) * self.y / 400)
         return (x,y)
 
     def isDestroyed(self):
@@ -60,31 +60,32 @@ class Tile():
         self.color = (r, g, b)
 
 class Model():
-    def __init__(self, N, initf, rf):
+    def __init__(self, N, nTiles, initf, rf):
         self.width = 400
         self.height = 400
-        self.maxcount = N
+        self.__initcount = N
         self.agents = set()
-        self.tiles = [[None for x in range(50)] for y in range(50)]
-        for x in range(0,50):
-            for y in range(0,50):
-                self.tiles[x][y] = Tile(x*8,y*8,8,8,self)
+        self.tiles = [[None for x in range(nTiles)] for y in range(nTiles)]
+        tileSize = 400 / nTiles
+        for x in range(0,nTiles):
+            for y in range(0,nTiles):
+                self.tiles[x][y] = Tile(x*tileSize,y*tileSize,tileSize,tileSize,self)
                 self.tiles[x][y].setColor(0,0,0)
         self.__buttons = set()
-        self.initFunc = initf
-        self.renderFunc = rf
+        self.__initFunc = initf
+        self.__renderFunc = rf
         self.globals = {}
         self.__paused = False
         self.addSingleButton("setup",self.reset)
     
     def reset(self, model):
         self.agents.clear()
-        for i in range(self.maxcount):
+        for i in range(self.__initcount):
             a = Agent(random.randint(0,self.width),
                       random.randint(0,self.height),
                       self)
             self.agents.add(a)
-        self.initFunc(self)
+        self.__initFunc(self)
 
     def render(self):
         background(0,0,0)
@@ -97,7 +98,7 @@ class Model():
         for a in self.agents:
             if a.isDestroyed():
                 self.agents.remove(a)
-        self.renderFunc(self.agents)
+        self.__renderFunc(self.agents)
         for b in self.__buttons:
             b.render()
             if type(b) is ButtonToggle:
@@ -105,10 +106,6 @@ class Model():
                     b.func(self)
             if type(b) is ButtonSlider:
                 self.globals[b.label] = b.getValue()
-
-    def apply(self, f):
-        if not self.__paused:
-            f(self)
     
     def addSingleButton(self, label, func):
         buttonCount = len(self.__buttons)

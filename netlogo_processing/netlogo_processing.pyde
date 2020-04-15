@@ -18,8 +18,8 @@ def infectPath(model):
             model.tiles[x][y].info["infection"] = 200
         elif not a.info["immune"] and model.tiles[x][y].info["infection"] > 0:
             a.info["infection"] = 100
-    for x in range(50):
-        for y in range(50):
+    for x in range(20):
+        for y in range(20):
             if model.tiles[x][y].info["infection"] > 0:
                 model.tiles[x][y].setColor(150,150,0)
                 model.tiles[x][y].info["infection"] -= 1
@@ -33,8 +33,8 @@ def infect(model):
         a.info["infection"] = 0
         if (random.randint(0,100) < 5):
             a.info["infection"] = 1000
-    for x in range(50):
-        for y in range(50):
+    for x in range(20):
+        for y in range(20):
             model.tiles[x][y].setColor(0,50,0)
             model.tiles[x][y].info["infection"] = 0
     
@@ -56,7 +56,7 @@ def action(model):
 def printValue(model):
     print(model.globals["movespeed"])
 
-modello = ag.Model(100, infect, EpidemicRenderer)
+modello = ag.Model(100, 20, infect, EpidemicRenderer)
 modello.addToggleButton("go",action)
 modello.addSliderButton("movespeed", 0.0, 1.0)
 
