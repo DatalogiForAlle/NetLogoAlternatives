@@ -11,17 +11,37 @@ def EpidemicRenderer(agents):
             fill(0, 175, 0)
         ellipse(a.x, a.y, 10, 10)
 
-def infect(model):
+def infectPath(model):
     for a in model.agents:
-        a.speed = 0.2
+        (x,y) = a.currentTile()
+        if a.info["infection"] > 0:
+            model.tiles[x][y].info["infection"] = 200
+        elif not a.info["immune"] and model.tiles[x][y].info["infection"] > 0:
+            a.info["infection"] = 100
+    for x in range(50):
+        for y in range(50):
+            if model.tiles[x][y].info["infection"] > 0:
+                model.tiles[x][y].setColor(150,150,0)
+                model.tiles[x][y].info["infection"] -= 1
+            else:
+                model.tiles[x][y].setColor(0,50,0)
+
+def infect(model):
+    model.globals["movespeed"] = 0.2
+    for a in model.agents:
         a.info["immune"] = False
         a.info["infection"] = 0
         if (random.randint(0,100) < 5):
-            a.info["infection"] = 1000 
+            a.info["infection"] = 1000
+    for x in range(50):
+        for y in range(50):
+            model.tiles[x][y].setColor(0,50,0)
+            model.tiles[x][y].info["infection"] = 0
     
 def action(model):
     for a in model.agents:
         a.direction += random.randint(0,20)-10
+        a.speed = model.globals["movespeed"]
         a.move()
         if (a.info["infection"] > 1):
             for b in model.agents:
@@ -31,15 +51,18 @@ def action(model):
         elif a.info["infection"] == 1:
             a.info["infection"] = 0
             a.info["immune"] = True
+    infectPath(model)
+
+def printValue(model):
+    print(model.globals["movespeed"])
 
 modello = ag.Model(100, infect, EpidemicRenderer)
 modello.addToggleButton("go",action)
-modello.addSliderButton()
+modello.addSliderButton("movespeed", 0.0, 1.0)
 
 def setup():
     global modello
     size(800,400)
-    print("hej2")
     
 def draw():
     global modello
