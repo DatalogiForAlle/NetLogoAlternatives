@@ -360,17 +360,33 @@ class Graph():
     def reset(self):
         self.__ticks = 0
         for v in self.__variables:
-            self.__values[v] = [] 
+            self.__values[v] = []
+
+    def minimum(self):
+        mn = None
+        for var in self.__variables:
+            for val in self.__values[var]:
+                if mn == None or val < mn:
+                    mn = val
+        return mn
+
+    def maximum(self):
+        mx = None
+        for var in self.__variables:
+            for val in self.__values[var]:
+                if mx == None or val > mx:
+                    mx = val
+        return mx
     
     def render(self):
         stroke(255,255,255)
         line(self.__x, self.__y, self.__x, self.__y+self.__h)
         line(self.__x, self.__y+self.__h, self.__x+self.__w, self.__y+self.__h)
+        mn = self.minimum()
+        mx = self.maximum()
         for var in self.__variables:
             if len(self.__values[var]) > 0:
                 delta = self.__w / len(self.__values[var])
-                mn = min(self.__values[var])
-                mx = max(self.__values[var])
                 fill(255,255,255)
                 textAlign(CENTER,CENTER)
                 text(str(mx),self.__x-20,self.__y-40,40,40)
@@ -380,7 +396,6 @@ class Graph():
                     diff = 0.5
                 c = self.__colors[var]
                 stroke(c[0],c[1],c[2])
-                print(delta)
                 for i in range(len(self.__values[var][1:])):
                     line(self.__x + delta*i,
                          self.__y + self.__h * (1 - (self.__values[var][i] - mn) / diff),
