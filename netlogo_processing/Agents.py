@@ -1,3 +1,4 @@
+from __future__ import division
 import random
 
 class Agent():
@@ -77,6 +78,7 @@ class Model():
         self.globals = {}
         self.__paused = False
         self.addSingleButton("setup",self.reset)
+        self.__graph = Graph(450,200,300,150,self)
     
     def reset(self, model):
         self.agents.clear()
@@ -86,6 +88,13 @@ class Model():
                       self)
             self.agents.add(a)
         self.__initFunc(self)
+        self.__graph.reset()
+    
+    def tick(self):
+        self.__graph.update()
+
+    def plotVariable(self, label, r, g, b):
+        self.__graph.addVariable(label, r, g, b)
 
     def render(self):
         background(0,0,0)
@@ -106,6 +115,7 @@ class Model():
                     b.func(self)
             if type(b) is ButtonSlider:
                 self.globals[b.label] = b.getValue()
+        self.__graph.render()
     
     def addSingleButton(self, label, func):
         buttonCount = len(self.__buttons)
@@ -323,3 +333,57 @@ class ButtonSlider(Button):
     
     def onClick(self):
         self.active = not self.active
+
+class Graph():
+    def __init__(self, x, y, w, h, model):
+        self.__x = x
+        self.__y = y
+        self.__w = w
+        self.__h = h
+        self.__variables = []
+        self.__colors = {}
+        self.__values = {}
+        self.__model = model
+        self.__ticks = 0
+
+    def addVariable(self, label, r, g, b):
+        self.__variables.append(label)
+        self.__values[label] = []
+        self.__colors[label] = (r,g,b)
+    
+    def update(self):
+        self.__ticks += 1
+        for v in self.__variables:
+            if v in self.__model.globals:
+                self.__values[v].append(self.__model.globals[v])
+    
+    def reset(self):
+        self.__ticks = 0
+        for v in self.__variables:
+            self.__values[v] = [] 
+    
+    def render(self):
+        stroke(255,255,255)
+        line(self.__x, self.__y, self.__x, self.__y+self.__h)
+        line(self.__x, self.__y+self.__h, self.__x+self.__w, self.__y+self.__h)
+        for var in self.__variables:
+            if len(self.__values[var]) > 0:
+                delta = self.__w / len(self.__values[var])
+                mn = min(self.__values[var])
+                mx = max(self.__values[var])
+                fill(255,255,255)
+                textAlign(CENTER,CENTER)
+                text(str(mx),self.__x-20,self.__y-40,40,40)
+                text(str(mn),self.__x-20,self.__y+self.__h,40,40)
+                diff = mx - mn
+                if diff == 0:
+                    diff = 0.5
+                c = self.__colors[var]
+                stroke(c[0],c[1],c[2])
+                print(delta)
+                for i in range(len(self.__values[var][1:])):
+                    line(self.__x + delta*i,
+                         self.__y + self.__h * (1 - (self.__values[var][i] - mn) / diff),
+                         self.__x + delta*(i+1),
+                         self.__y + self.__h * (1 - (self.__values[var][i+1] - mn) / diff))
+            
