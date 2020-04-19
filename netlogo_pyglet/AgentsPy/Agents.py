@@ -1,5 +1,7 @@
-import pyglet
+import pyglet.graphics
 import random
+import math
+from pyglet.window import mouse
 
 class Agent():
     def __init__(self, x, y, model):
@@ -63,6 +65,9 @@ class Tile():
 
 class Model():
     def __init__(self, N, nTiles, initf, rf):
+        self.batch = pyglet.graphics.Batch()
+        self.__buttons = set()
+        """
         self.width = 400
         self.height = 400
         self.__initcount = N
@@ -80,8 +85,35 @@ class Model():
         self.__paused = False
         self.addSingleButton("setup",self.reset)
         self.__graph = Graph(450,200,300,150,self)
+        """
+
+        pyglet.clock.schedule_interval(self.update, 0.02)
+
+        @window.event
+        def on_mouse_motion(x, y, dx, dy):
+            for b in self.__buttons:
+                b.mouseMoved(x,y)
+
+        @window.event
+        def on_mouse_press(x, y, button, modifiers):
+            if button == mouse.LEFT:
+                for b in self.__buttons:
+                    b.mousePressed = True
+
+        @window.event
+        def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
+            for b in self.__buttons:
+                b.mouseMoved(x,y)
+
+        @window.event
+        def on_mouse_release(x, y, button, modifiers):
+            if button == mouse.LEFT:
+                for b in self.__buttons:
+                    b.mousePressed = False
 
     def reset(self, model):
+        pass
+        """
         self.agents.clear()
         for i in range(self.__initcount):
             a = Agent(random.randint(0,self.width),
@@ -90,14 +122,23 @@ class Model():
             self.agents.add(a)
         self.__initFunc(self)
         self.__graph.reset()
+        """
 
     def tick(self):
-        self.__graph.update()
+        pass
+        #self.__graph.update()
 
     def plotVariable(self, label, r, g, b):
-        self.__graph.addVariable(label, r, g, b)
+        pass
+        #self.__graph.addVariable(label, r, g, b)
+
+    def update(self, dt):
+        for b in self.__buttons:
+            b.update()
 
     def render(self):
+        self.batch.draw()
+        """
         background(0,0,0)
         noStroke()
         for x in range(len(self.tiles[0])):
@@ -117,14 +158,23 @@ class Model():
             if type(b) is ButtonSlider:
                 self.globals[b.label] = b.getValue()
         self.__graph.render()
+        """
 
     def addSingleButton(self, label, func):
+        buttonCount = len(self.__buttons)
+        self.__buttons.add(
+            Button(
+                16+(buttonCount%2)*160,
+                16+math.floor(buttonCount/2)*76,
+                150,80,label,self,None))
+        """
         buttonCount = len(self.__buttons)
         button = Button(440+(buttonCount%2)*160,
                         16+floor(buttonCount/2)*76,
                         140,56,label,func)
         button.model = self
         self.__buttons.add(button)
+        """
 
     def addToggleButton(self, label, func):
         buttonCount = len(self.__buttons)
@@ -143,75 +193,90 @@ class Model():
         self.__buttons.add(button)
 
 class Button(object):
-    def __init__(self, x, y, w, h, label, f):
-        self.x = x
-        self.y = y
-        self.w = w
-        self.h = h
+    def __init__(self, x, y, w, h, label, model, f):
+        self.__x = x
+        self.__y = y
+        self.__w = w
+        self.__h = h
         self.label = label
-        self.pressed = False
         self.func = f
         self.state = 0 # 0=default | 1=mouse_hovering | 2=mouse_clicking
         self.counter = 0
-        self.model = None
+        self.model = model
+        self.mouseHover = False
+        self.mousePressed = False
+        self.vertex_list = self.model.batch.add_indexed(
+            4, pyglet.gl.GL_TRIANGLES, None,
+            [0, 1, 2, 0, 2, 3],
+            ('v2i', (self.__x, self.__y,
+                     self.__x+self.__w, self.__y,
+                     self.__x+self.__w, self.__y+self.__h,
+                     self.__x, self.__y+self.__h)),
+            ('c3B', (150, 150, 150,
+                     100, 100, 100,
+                     150, 150, 150,
+                     200, 200, 200))
+        )
+        """
+        label = pyglet.text.Label('Hello, world',
+                          font_name='Times New Roman',
+                          font_size=36,
+                          x=window.width//2, y=window.height//2,
+                          anchor_x='center', anchor_y='center')
+        """
 
-    def mouseHovering(self):
-        return ((self.x < mouseX)
-                and (mouseX < self.x + self.w)
-                and (self.y < mouseY)
-                and (mouseY < self.y + self.h))
-
-    def render(self):
-        if self.state == 0 and self.mouseHovering():
+    def update(self):
+        if self.state == 0 and self.mouseHover:
             self.state = 1
             self.renderHover()
-        elif self.state == 1 and self.mouseHovering():
-            if mousePressed:
+        elif self.state == 1 and self.mouseHover:
+            if self.mousePressed:
                 self.state = 2
-                self.onClick()
                 self.renderClick()
             else:
                 self.renderHover()
-        elif self.state == 2 and self.mouseHovering():
-            if mousePressed:
+        elif self.state == 2 and self.mouseHover:
+            if self.mousePressed:
                 self.renderClick()
             else:
                 self.state = 0
+                self.onClick()
                 self.renderHover()
         else:
             self.state = 0
             self.renderDefault()
 
     def renderDefault(self):
-        fill(200,200,200)
-        rect(self.x,self.y,self.w,self.h)
-        fill(0, 0, 0)
-        textAlign(CENTER,CENTER)
-        text(self.label,self.x,self.y,self.w,self.h)
+        
+        self.vertex_list.colors = [150, 150, 150,
+                                   100, 100, 100,
+                                   150, 150, 150,
+                                   200, 200, 200]
 
     def renderHover(self):
-        fill(150,150,150)
-        rect(self.x,self.y,self.w,self.h)
-        fill(0, 0, 0)
-        textAlign(CENTER,CENTER)
-        text(self.label,self.x,self.y,self.w,self.h)
+        self.vertex_list.colors = [150, 150, 150,
+                                   200, 200, 200,
+                                   150, 150, 150,
+                                   100, 100, 100]
 
     def renderClick(self):
-        fill(100,100,100)
-        rect(self.x,self.y,self.w,self.h)
-        fill(0, 0, 0)
-        textAlign(CENTER,CENTER)
-        text(self.label,self.x,self.y,self.w,self.h)
+        self.vertex_list.colors = [100, 100, 100,
+                                   150, 150, 150,
+                                   100, 100, 100,
+                                   50, 50, 50]
+
+    def mouseMoved(self,mx,my):
+        self.mouseHover = ((self.__x < mx)
+                           and (mx < self.__x + self.__w)
+                           and (self.__y < my)
+                           and (my < self.__y + self.__h))
 
     def onClick(self):
-        self.func(self.model)
+        print(":^)")
+        #self.func(self.model)
 
 class ButtonToggle(Button):
     def __init__(self, x, y, w, h, label, f):
-        self.x = x
-        self.y = y
-        self.w = w
-        self.h = h
         self.label = label
         self.pressed = False
         self.func = f
@@ -407,24 +472,15 @@ class Graph():
                          self.__y + self.__h * (1 - (self.__values[var][i+1] - mn) / diff))
 
 window = pyglet.window.Window()
-label = pyglet.text.Label('Hello, world!',
-                          font_name='Arial',
-                          font_size=36,
-                          x=window.width // 2,
-                          y=window.height // 2,
-                          anchor_x='center',
-                          anchor_y='center')
+modello = Model(100, 50, None, None)
+modello.addSingleButton("hej", None)
+modello.addSingleButton("hej2", None)
+modello.addSingleButton("hej3", None)
 
 @window.event
 def on_draw():
     window.clear()
-    label.draw()
-    pyglet.gl.glLoadIdentity()
-    pyglet.gl.glBegin(pyglet.gl.GL_TRIANGLES)
-    pyglet.gl.glVertex2f(0, 100)
-    pyglet.gl.glVertex2f(window.width/2, 0)
-    pyglet.gl.glVertex2f(window.width, window.height)
-    pyglet.gl.glEnd()
+    modello.render()
 
 def testo():
     pyglet.app.run()
