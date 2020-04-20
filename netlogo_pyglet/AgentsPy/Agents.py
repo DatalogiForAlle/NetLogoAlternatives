@@ -7,11 +7,31 @@ class Agent():
     def __init__(self, x, y, model):
         self.model = model
         self.info = {}
-        self.x = x
-        self.y = y
+        self.__x = x
+        self.__y = y
+        self.size = 100
         self.direction = random.randint(0,359)
         self.speed = 1
         self.__destroyed = False
+        self.__resolution = 5
+        vertices = [self.__x,self.__y]
+        colors = [255,255,255]
+        indices = []
+        for i in range(self.__resolution):
+            a = i * (2 * math.pi) / self.__resolution
+            vertices.append(self.__x + math.cos(a) * self.size)
+            vertices.append(self.__y + math.sin(a) * self.size)
+            colors.extend([255, 255, 255])
+            if i < (self.__resolution-1):
+                indices.extend([0, i+1, i+2])
+            else:
+                indices.extend([0, i+1, 1])
+        self.__vertex_list = self.model.batch.add_indexed(
+            self.__resolution+1, pyglet.gl.GL_TRIANGLES, self.model.getForeground(),
+            indices,
+            ('v2f', vertices),
+            ('c3B', colors)
+        )
 
     def wraparound(self):
         self.x = self.x % self.model.width
@@ -45,6 +65,19 @@ class Agent():
     def destroy(self):
         self.__destroyed = True
 
+    def render(self):
+        self.__vertex_list.vertices = [
+            self.__x,self.__y,
+            self.__x,self.__y+self.size,
+            self.__x+self.size*0.75,self.__y+self.size*0.75,
+            self.__x+self.size,self.__y,
+            self.__x+self.size*0.75,self.__y-self.size*0.75,
+            self.__x,self.__y-self.size,
+            self.__x-self.size*0.75,self.__y-self.size*0.75,
+            self.__x-self.size,self.__y,
+            self.__x-self.size*0.75,self.__y+self.size*0.75
+        ]
+
 class Tile():
     def __init__(self,x,y,w,h,model):
         self.x = x
@@ -67,6 +100,10 @@ class Model():
     def __init__(self, N, nTiles, initf, rf):
         self.batch = pyglet.graphics.Batch()
         self.__buttons = set()
+        self.__backgroundGroup = pyglet.graphics.OrderedGroup(0)
+        self.__foregroundGroup = pyglet.graphics.OrderedGroup(1)
+        self.__labelGroup = pyglet.graphics.OrderedGroup(2)
+        self.zepto = Agent(400,200,self)
         """
         self.width = 400
         self.height = 400
@@ -135,6 +172,15 @@ class Model():
     def update(self, dt):
         for b in self.__buttons:
             b.update()
+
+    def getBackground(self):
+        return self.__backgroundGroup
+
+    def getForeground(self):
+        return self.__foregroundGroup
+
+    def getLabelGroup(self):
+        return self.__labelGroup
 
     def render(self):
         self.batch.draw()
@@ -206,7 +252,7 @@ class Button(object):
         self.mouseHover = False
         self.mousePressed = False
         self.vertex_list = self.model.batch.add_indexed(
-            4, pyglet.gl.GL_TRIANGLES, None,
+            4, pyglet.gl.GL_TRIANGLES, self.model.getForeground(),
             [0, 1, 2, 0, 2, 3],
             ('v2i', (self.__x, self.__y,
                      self.__x+self.__w, self.__y,
@@ -217,13 +263,14 @@ class Button(object):
                      150, 150, 150,
                      200, 200, 200))
         )
-        """
-        label = pyglet.text.Label('Hello, world',
-                          font_name='Times New Roman',
-                          font_size=36,
-                          x=window.width//2, y=window.height//2,
-                          anchor_x='center', anchor_y='center')
-        """
+        pyglet.text.Label(label,
+                          font_name='Courier New',
+                          font_size=12,
+                          x=self.__x+self.__w/2, y=self.__y+self.__h/2,
+                          anchor_x='center', anchor_y='center',
+                          batch=model.batch,
+                          color=(0,0,0,255),
+                          group=model.getLabelGroup())
 
     def update(self):
         if self.state == 0 and self.mouseHover:
@@ -247,7 +294,6 @@ class Button(object):
             self.renderDefault()
 
     def renderDefault(self):
-        
         self.vertex_list.colors = [150, 150, 150,
                                    100, 100, 100,
                                    150, 150, 150,
@@ -272,7 +318,7 @@ class Button(object):
                            and (my < self.__y + self.__h))
 
     def onClick(self):
-        print(":^)")
+        print(self.label)
         #self.func(self.model)
 
 class ButtonToggle(Button):
@@ -471,7 +517,7 @@ class Graph():
                          self.__x + delta*(i+1),
                          self.__y + self.__h * (1 - (self.__values[var][i+1] - mn) / diff))
 
-window = pyglet.window.Window()
+window = pyglet.window.Window(width=800,height=400)
 modello = Model(100, 50, None, None)
 modello.addSingleButton("hej", None)
 modello.addSingleButton("hej2", None)
