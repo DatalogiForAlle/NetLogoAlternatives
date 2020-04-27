@@ -17,11 +17,11 @@ class Agent():
         self.speed = 1
         self._destroyed = False
         self._resolution = 10
-        self._initRender()
+        self._init_render()
 
-    def _initRender(self):
-        rx = self._renderX()
-        ry = self._renderY()
+    def _init_render(self):
+        rx = self._render_x()
+        ry = self._render_y()
         vertices = [rx,ry]
         colors = [255,255,255]
         indices = []
@@ -35,7 +35,7 @@ class Agent():
             else:
                 indices.extend([0, i+1, 1])
         self._vertex_list = self._area.batch.add_indexed(
-            self._resolution+1, pyglet.gl.GL_TRIANGLES, self._area.agentGroup,
+            self._resolution+1, pyglet.gl.GL_TRIANGLES, self._area.agent_group,
             indices,
             ('v2f', vertices),
             ('c3B', colors)
@@ -45,7 +45,7 @@ class Agent():
         self.x = self.x % self._area.w
         self.y = self.y % self._area.h
 
-    def jumpTo(self, x, y):
+    def jump_to(self, x, y):
         self.x = x
         self.y = y
         self._wraparound()
@@ -56,45 +56,45 @@ class Agent():
     def set(self, var, val):
         self._info[var] = val
 
-    def pointTo(self, other_x, other_y):
-        dist = sqrt(((self.x-other_x)**2 + (self.y-other_y)**2)**0.5)
-        self.direction = math.acos((self.x - other_x) / dist) * 360 / math.pi
+    def point_to(self, other_x, other_y):
+        dist = self.distance_to(other_x,other_y)
+        self.direction = math.degrees(math.acos((self.x - other_x) / dist))
 
     def move(self):
-        self.x += math.cos(self.direction * 2 * math.pi / 360) * self.speed
-        self.y += math.sin(self.direction * 2 * math.pi / 360) * self.speed
+        self.x += math.cos(math.radians(self.direction)) * self.speed
+        self.y += math.sin(math.radians(self.direction)) * self.speed
         self._wraparound()
 
-    def distanceTo(self, other_x, other_y):
+    def distance_to(self, other_x, other_y):
         return ((self.x-other_x)**2 + (self.y-other_y)**2)**0.5
 
-    def currentTile(self):
-        x = floor(len(self.model.tiles) * self.x / 400)
-        y = floor(len(self.model.tiles) * self.y / 400)
+    def current_tile(self):
+        x = floor(len(self.model.tiles) * self.x / self._area.w)
+        y = floor(len(self.model.tiles) * self.y / self._area.h)
         return (x,y)
 
-    def isDestroyed(self):
+    def is_destroyed(self):
         return self._destroyed
 
     def destroy(self):
         self._destroyed = True
         self._vertex_list.delete()
 
-    def _renderX(self):
+    def _render_x(self):
         return self._area.x + self.x
 
-    def _renderY(self):
+    def _render_y(self):
         return self._area.y + self.y
 
-    def setColor(self, r, g, b):
+    def set_color(self, r, g, b):
         for i in range(len(self._vertex_list.colors)//3):
             self._vertex_list.colors[i*3] = r
             self._vertex_list.colors[i*3+1] = g
             self._vertex_list.colors[i*3+2] = b
 
     def render(self):
-        x = self._renderX()
-        y = self._renderY()
+        x = self._render_x()
+        y = self._render_y()
         vertices = [x,y]
         for i in range(self._resolution):
             a = i * (2 * math.pi) / self._resolution
@@ -112,16 +112,16 @@ class Tile():
         self._info = {}
         self.color = (0,0,0)
         self._vertex_list = self._area.batch.add_indexed(
-            4, pyglet.gl.GL_TRIANGLES, self._area.tileGroup,
+            4, pyglet.gl.GL_TRIANGLES, self._area.tile_group,
             [0,1,2,0,2,3],
             ('v2f', [self.x,self.y,
                      self.x+self._w,self.y,
                      self.x+self._w,self.y+self._h,
                      self.x,self.y+self._h]),
-            ('c3B', [255,0,0,
-                     255,0,0,
-                     255,0,0,
-                     255,0,0])
+            ('c3B', [0,0,0,
+                     0,0,0,
+                     0,0,0,
+                     0,0,0])
         )
 
     def get(self, var):
@@ -133,39 +133,39 @@ class Tile():
     def render(self):
         pass
 
-    def setColor(self, r, g, b):
+    def set_color(self, r, g, b):
         for i in range(4):
             self._vertex_list.colors[i*3] = r
             self._vertex_list.colors[i*3+1] = g
             self._vertex_list.colors[i*3+2] = b
 
 class SimulationArea():
-    def __init__(self, x, y, w, h, nAgents, nTiles, batch):
+    def __init__(self, x, y, w, h, n_agents, n_tiles, batch):
         self.x = x
         self.y = y
         self.w = w
         self.h = h
-        self.nAgents = nAgents
+        self.n_agents = n_agents
         self.agents = set()
-        self.nTiles = nTiles
-        self.tiles = [[None for x in range(nTiles)] for y in range(nTiles)]
+        self.n_tiles = n_tiles
+        self.tiles = [[None for x in range(n_tiles)] for y in range(n_tiles)]
         self.batch = batch
-        self.agentGroup = pyglet.graphics.OrderedGroup(2)
-        self.tileGroup = pyglet.graphics.OrderedGroup(1)
+        self.agent_group = pyglet.graphics.OrderedGroup(2)
+        self.tile_group = pyglet.graphics.OrderedGroup(1)
 
     def reset(self):
         for a in self.agents:
             a.destroy()
         self.agents.clear()
-        for i in range(self.nAgents):
+        for i in range(self.n_agents):
             self.agents.add(Agent(random.randint(0,self.w),
                                   random.randint(0,self.h),
                                   self))
-        tileW = self.w / self.nTiles
-        tileH = self.h / self.nTiles
-        for x in range(0,self.nTiles):
-            for y in range(0,self.nTiles):
-                self.tiles[x][y] = Tile(x*tileW,y*tileH,tileW,tileH,self)
+        tile_w = self.w / self.n_tiles
+        tile_h = self.h / self.n_tiles
+        for x in range(0,self.n_tiles):
+            for y in range(0,self.n_tiles):
+                self.tiles[x][y] = Tile(x*tile_w,y*tile_h,tile_w,tile_h,self)
 
     def render(self):
         for a in self.agents:
@@ -173,18 +173,18 @@ class SimulationArea():
         self.batch.draw()
 
 class Model():
-    def __init__(self, nAgents, nTiles):
+    def __init__(self, n_agents, n_tiles):
         global AgentWindow
         self._buttons = set()
-        self._bgGroup = pyglet.graphics.OrderedGroup(0)
-        self._buttonGroup = pyglet.graphics.OrderedGroup(3)
-        self._labelGroup = pyglet.graphics.OrderedGroup(4)
-        self._renderBatch = pyglet.graphics.Batch()
-        self._area = SimulationArea(0,0,400,400,nAgents,nTiles,self._renderBatch)
+        self._bg_group = pyglet.graphics.OrderedGroup(0)
+        self._button_group = pyglet.graphics.OrderedGroup(3)
+        self._label_group = pyglet.graphics.OrderedGroup(4)
+        self._render_batch = pyglet.graphics.Batch()
+        self._area = SimulationArea(0,0,400,400,n_agents,n_tiles,self._render_batch)
         self._globals = {}
         win_size = AgentWindow.get_size()
-        self._renderBatch.add_indexed(
-            4, pyglet.gl.GL_TRIANGLES, self._bgGroup,
+        self._render_batch.add_indexed(
+            4, pyglet.gl.GL_TRIANGLES, self._bg_group,
             [0, 1, 2, 0, 2, 3],
             ('v2i', (0, 0,
                      win_size[0], 0,
@@ -206,24 +206,24 @@ class Model():
         @AgentWindow.event
         def on_mouse_motion(x, y, dx, dy):
             for b in self._buttons:
-                b.mouseMoved(x,y)
+                b.mouse_moved(x,y)
 
         @AgentWindow.event
         def on_mouse_press(x, y, button, modifiers):
             if button == mouse.LEFT:
                 for b in self._buttons:
-                    b.mousePressed = True
+                    b.mouse_pressed = True
 
         @AgentWindow.event
         def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
             for b in self._buttons:
-                b.mouseMoved(x,y)
+                b.mouse_moved(x,y)
 
         @AgentWindow.event
         def on_mouse_release(x, y, button, modifiers):
             if button == mouse.LEFT:
                 for b in self._buttons:
-                    b.mousePressed = False
+                    b.mouse_pressed = False
 
     def get(self, var):
         return self._globals[var]
@@ -231,20 +231,20 @@ class Model():
     def set(self, var, val):
         self._globals[var] = val
 
-    def getAgents(self):
+    def get_agents(self):
         return self._area.agents
 
-    def getTile(self, x, y):
+    def get_tile(self, x, y):
         return self._area.tiles[x][y]
 
-    def getTileN(self):
-        return self._area.nTiles
+    def get_tile_n(self):
+        return self._area.n_tiles
 
     def reset(self):
         self._area.reset()
         pass
 
-    def plotVariable(self, label, r, g, b):
+    def plot_variable(self, label, r, g, b):
         pass
         #self._graph.addVariable(label, r, g, b)
 
@@ -254,21 +254,23 @@ class Model():
             if type(b) is ButtonToggle:
                 if b.active:
                     b.func(self)
+            if type(b) is ButtonSlider:
+                self._globals[b.variable] = b.get_value()
 
-    def getRenderBatch(self):
-        return self._renderBatch
+    def get_render_batch(self):
+        return self._render_batch
 
-    def getBackgroundGroup(self):
-        return self._bgGroup
+    def get_background_group(self):
+        return self._bg_group
 
-    def getButtonGroup(self):
-        return self._buttonGroup
+    def get_button_group(self):
+        return self._button_group
 
-    def getLabelGroup(self):
-        return self._labelGroup
+    def get_label_group(self):
+        return self._label_group
 
     def render(self):
-        self._renderBatch.draw()
+        self._render_batch.draw()
         for a in self._area.agents:
             a.render()
         """
@@ -293,29 +295,29 @@ class Model():
         self._graph.render()
         """
 
-    def addSingleButton(self, label, func):
-        buttonCount = len(self._buttons)
+    def add_single_button(self, label, func):
+        button_count = len(self._buttons)
         self._buttons.add(
             Button(
-                440+(buttonCount%2)*160,
-                16+math.floor(buttonCount/2)*76,
+                440+(button_count%2)*160,
+                16+math.floor(button_count/2)*76,
                 140,56,label,self,func))
 
-    def addToggleButton(self, label, func):
-        buttonCount = len(self._buttons)
+    def add_toggle_button(self, label, func):
+        button_count = len(self._buttons)
         self._buttons.add(
             ButtonToggle(
-                440+(buttonCount%2)*160,
-                16+math.floor(buttonCount/2)*76,
+                440+(button_count%2)*160,
+                16+math.floor(button_count/2)*76,
                 140,56,label,self,func))
 
-    def addSliderButton(self, label, min, max):
-        buttonCount = len(self._buttons)
-        button = ButtonSlider(440+(buttonCount%2)*160,
-                              16+floor(buttonCount/2)*76,
-                              140,56,label,min,max)
-        button.model = self
-        self._buttons.add(button)
+    def add_slider_button(self, label, min, max):
+        button_count = len(self._buttons)
+        self._buttons.add(
+            ButtonSlider(
+                440+(button_count%2)*160,
+                16+math.floor(button_count/2)*76,
+                140,56,label,self,min,max))
 
 class Button(object):
     def __init__(self, x, y, w, h, label, model, f):
@@ -323,15 +325,14 @@ class Button(object):
         self._y = y
         self._w = w
         self._h = h
-        self.label = label
         self.func = f
         self.state = 0 # 0=default | 1=mouse_hovering | 2=mouse_clicking
         self.counter = 0
         self.model = model
-        self.mouseHover = False
-        self.mousePressed = False
-        self.vertex_list = model.getRenderBatch().add_indexed(
-            4, pyglet.gl.GL_TRIANGLES, model.getButtonGroup(),
+        self.mouse_hover = False
+        self.mouse_pressed = False
+        self.vertex_list = model.get_render_batch().add_indexed(
+            4, pyglet.gl.GL_TRIANGLES, model.get_button_group(),
             [0, 1, 2, 0, 2, 3],
             ('v2i', (self._x, self._y,
                      self._x+self._w, self._y,
@@ -342,69 +343,71 @@ class Button(object):
                      150, 150, 150,
                      200, 200, 200))
         )
-        pyglet.text.Label(label,
-                          font_name='Courier New',
-                          font_size=12,
-                          x=self._x+self._w/2, y=self._y+self._h/2,
-                          anchor_x='center', anchor_y='center',
-                          batch=model.getRenderBatch(),
-                          color=(0,0,0,255),
-                          group=model.getLabelGroup())
+        self._label = pyglet.text.Label(
+            label,
+            font_name='Courier New',
+            font_size=12,
+            x=self._x+self._w/2, y=self._y+self._h/2,
+            anchor_x='center', anchor_y='center',
+            batch=model.get_render_batch(),
+            color=(0,0,0,255),
+            group=model.get_label_group()
+        )
 
     def update(self):
-        if self.state == 0 and self.mouseHover:
+        if self.state == 0 and self.mouse_hover:
             self.state = 1
-            self.renderHover()
-        elif self.state == 1 and self.mouseHover:
-            if self.mousePressed:
+            self.render_hover()
+        elif self.state == 1 and self.mouse_hover:
+            if self.mouse_pressed:
                 self.state = 2
-                self.renderClick()
+                self.render_click()
             else:
-                self.renderHover()
-        elif self.state == 2 and self.mouseHover:
-            if self.mousePressed:
-                self.renderClick()
+                self.render_hover()
+        elif self.state == 2 and self.mouse_hover:
+            if self.mouse_pressed:
+                self.render_click()
             else:
                 self.state = 0
-                self.onClick()
-                self.renderHover()
+                self.on_click()
+                self.render_hover()
         else:
             self.state = 0
-            self.renderDefault()
+            self.render_default()
 
-    def renderDefault(self):
+    def render_default(self):
         self.vertex_list.colors = [150, 150, 150,
                                    100, 100, 100,
                                    150, 150, 150,
                                    200, 200, 200]
 
-    def renderHover(self):
+    def render_hover(self):
         self.vertex_list.colors = [150, 150, 150,
                                    200, 200, 200,
                                    150, 150, 150,
                                    100, 100, 100]
 
-    def renderClick(self):
+    def render_click(self):
         self.vertex_list.colors = [100, 100, 100,
                                    150, 150, 150,
                                    100, 100, 100,
                                    50, 50, 50]
 
-    def mouseMoved(self,mx,my):
-        self.mouseHover = ((self._x < mx)
+    def mouse_moved(self,mx,my):
+        self.mouse_hover = ((self._x < mx)
                            and (mx < self._x + self._w)
                            and (self._y < my)
                            and (my < self._y + self._h))
 
-    def onClick(self):
+    def on_click(self):
         self.func(self.model)
 
 class ButtonToggle(Button):
     def __init__(self, x, y, w, h, label, model, f):
         super().__init__(x, y, w, h, label, model, f)
         self.active=False
-        self._led_vertex_list = model.getRenderBatch().add_indexed(
-            5, pyglet.gl.GL_TRIANGLES, model.getLabelGroup(),
+        self._led_vertex_list = model.get_render_batch().add_indexed(
+            5, pyglet.gl.GL_TRIANGLES, model.get_label_group(),
             [0,1,2,0,2,3,0,3,4,0,4,1,0],
             ('v2f', (self._x+self._w-15, self._y+self._h-15,
                      self._x+self._w-15, self._y+self._h-5,
@@ -419,25 +422,7 @@ class ButtonToggle(Button):
         )
 
     def update(self):
-        if self.state == 0 and self.mouseHover:
-            self.state = 1
-            self.renderHover()
-        elif self.state == 1 and self.mouseHover:
-            if self.mousePressed:
-                self.state = 2
-                self.renderClick()
-            else:
-                self.renderHover()
-        elif self.state == 2 and self.mouseHover:
-            if self.mousePressed:
-                self.renderClick()
-            else:
-                self.state = 0
-                self.onClick()
-                self.renderHover()
-        else:
-            self.state = 0
-            self.renderDefault()
+        super().update()
         if self.active:
             self._led_vertex_list.colors = [
                 0,250,0,
@@ -455,23 +440,24 @@ class ButtonToggle(Button):
                 0,25,0
             ]
 
-    def onClick(self):
+    def on_click(self):
         self.active = not self.active
 
 class SliderHandle(Button):
-    def __init__(self, x, y, w):
+    def __init__(self, x, y, w, model):
         self.x = x
         self.y = y
         self.h = 18
         self.w = 6
+        self.mouse_hover = False
+        self.follow_mouse = False
         self.sliderW = w
         self.r = 50
         self.state = 0 # 0=default | 1=mouse_hovering | 2=mouse_clicking
-        rect(self.x+(self.sliderW*self.r/100)-self.w/2,self.y-self.h/2,self.w,self.h)
-        self._vertex_list = model.getRenderBatch().add_indexed(
-            4, pyglet.gl.GL_TRIANGLES, model.getButtonGroup(),
+        self._vertex_list = model.get_render_batch().add_indexed(
+            4, pyglet.gl.GL_TRIANGLES, model.get_button_group(),
             [0, 1, 2, 0, 2, 3],
-            ('v2i', (self.x+(self.sliderW*self.r/100)-self.w/2, self.y+self.h/2,
+            ('v2f', (self.x+(self.sliderW*self.r/100)-self.w/2, self.y+self.h/2,
                      self.x+(self.sliderW*self.r/100)+self.w/2, self.y+self.h/2,
                      self.x+(self.sliderW*self.r/100)+self.w/2, self.y-self.h/2,
                      self.x+(self.sliderW*self.r/100)-self.w/2, self.y-self.h/2)),
@@ -481,14 +467,38 @@ class SliderHandle(Button):
                      150, 150, 150))
         )
 
-    def mouseMoved(self,mx,my):
-        self.mouseHover = (self.x+(self.sliderW*self.r/100)-self.w/2 < mx) and (mx < self.x+(self.sliderW*self.r/100) + self.w/2) and (self.y-self.h/2 < my) and (my < self.y + self.h/2)
-        if mx < self.x:
-            self.r = 0
-        elif mx > self.x + self.sliderW:
-            self.r = 100
+    def mouse_moved(self,mx,my):
+        self.mouse_hover = (self.x+(self.sliderW*self.r/100)-self.w/2 < mx) and (mx < self.x+(self.sliderW*self.r/100) + self.w/2) and (self.y-self.h/2 < my) and (my < self.y + self.h/2)
+        if self.follow_mouse:
+            if mx < self.x:
+                self.r = 0
+            elif mx > self.x + self.sliderW:
+                self.r = 100
+            else:
+                self.r = (mx - self.x) * 100 / self.sliderW
+
+    def update(self):
+        self.follow_mouse = False
+        if self.state == 0 and self.mouse_hover:
+            self.state = 1
+            self.render_hover()
+        elif self.state == 1 and self.mouse_hover:
+            if self.mouse_pressed:
+                self.state = 2
+                self.follow_mouse = True
+                self.render_click()
+            else:
+                self.render_hover()
+        elif self.state == 2:
+            if self.mouse_pressed:
+                self.follow_mouse = True
+                self.render_click()
+            else:
+                self.state = 0
+                self.render_hover()
         else:
-            self.r = (mx - self.x) * 100 / self.sliderW
+            self.state = 0
+            self.render_default()
         self._vertex_list.vertices = [
             self.x+(self.sliderW*self.r/100)-self.w/2, self.y+self.h/2,
             self.x+(self.sliderW*self.r/100)+self.w/2, self.y+self.h/2,
@@ -496,83 +506,62 @@ class SliderHandle(Button):
             self.x+(self.sliderW*self.r/100)-self.w/2, self.y-self.h/2
         ]
 
-    def update(self):
-        if self.state == 0 and self.mouseHover:
-            self.state = 1
-            self.renderHover()
-        elif self.state == 1 and self.mouseHover:
-            if mousePressed:
-                self.state = 2
-                self.followMouse()
-                self.renderClick()
-            else:
-                self.renderHover()
-        elif self.state == 2:
-            if mousePressed:
-                self.followMouse()
-                self.renderClick()
-            else:
-                self.state = 0
-                self.renderHover()
-        else:
-            self.state = 0
-            self.renderDefault()
-
-    def renderDefault(self):
+    def render_default(self):
         self._vertex_list.colors = [
+            250,250,250,
+            200,200,200,
             150,150,150,
-            150,150,150,
-            150,150,150,
-            150,150,150
+            200,200,200
         ]
 
-    def renderHover(self):
+    def render_hover(self):
         self._vertex_list.colors = [
-            100,100,100,
-            100,100,100,
-            100,100,100,
-            100,100,100
+            220,220,220,
+            170,170,170,
+            120,120,120,
+            170,170,170
         ]
 
-    def renderClick(self):
+    def render_click(self):
         self._vertex_list.colors = [
-            50,50,50,
-            50,50,50,
-            50,50,50,
-            50,50,50
+            20,20,20,
+            70,70,70,
+            120,120,120,
+            70,70,70
         ]
-"""
+
 class ButtonSlider(Button):
-    def __init__(self, x, y, w, h, label, min, max):
-        self.x = x
-        self.y = y
-        self.w = w
-        self.h = h
-        self.slider = SliderHandle(self.x+5, self.y+self.h-15, self.w-10)
-        self.label = label
+    def __init__(self, x, y, w, h, label, model, min, max):
+        super().__init__(x, y, w, h, label, model, None)
+        self.slider = SliderHandle(self._x+5, self._y+15, self._w-10, model)
         self.min = min
         self.max = max
+        self.variable = label
+        self._label.delete()
+        self._label = pyglet.text.Label(
+            label,
+            font_name='Courier New',
+            font_size=10,
+            x=self._x+self._w/2, y=self._y+3*self._h/4,
+            anchor_x='center', anchor_y='center',
+            batch=model.get_render_batch(),
+            color=(0,0,0,255),
+            group=model.get_label_group()
+        )
 
-    def render(self):
-        self.renderDefault()
-        self.slider.render()
+    def mouse_moved(self,mx,my):
+        self.slider.mouse_moved(mx,my)
 
-    def renderDefault(self):
-        fill(200,200,200)
-        rect(self.x,self.y,self.w,self.h)
-        fill(0, 0, 0)
-        textAlign(CENTER,TOP)
-        text(self.label,self.x,self.y+5,self.w,self.h)
-        textAlign(LEFT,TOP)
-        text(str(self.min),self.x+10,self.y+15,self.w,self.h)
-        textAlign(RIGHT,TOP)
-        text(str(self.max),self.x-10,self.y+15,self.w,self.h)
+    def update(self):
+        self.slider.mouse_pressed = self.mouse_pressed
+        self.render_default()
+        self.slider.update()
 
-    def getValue(self):
+    def get_value(self):
         return self.min + (self.max - self.min) * self.slider.r / 100
 
-    def onClick(self):
-        self.active = not self.active
+    def on_click(self):
+        pass
 """
 class Graph():
     def __init__(self, x, y, w, h, model):
@@ -641,7 +630,7 @@ class Graph():
                          self._y + self._h * (1 - (self._values[var][i] - mn) / diff),
                          self._x + delta*(i+1),
                          self._y + self._h * (1 - (self._values[var][i+1] - mn) / diff))
-
+"""
 AgentWindow = pyglet.window.Window(width=800,height=400)
 
 def Start():
