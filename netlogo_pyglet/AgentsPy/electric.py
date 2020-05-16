@@ -1,51 +1,55 @@
 import agents as ag
 
 class Electron(ag.Agent):
-    def __init__(self):
-        super().__init__()
+    def setup(self, model):
         self.size = 5
         self.set_color(0,0,255)
-        self.speed=modello.get("speed")
-        self.set("charged",False)
+        self.speed=model["speed"]
+        self.direction = 180
+        self.charged = False
+
+    def step(self, model):
+        self.speed=model["speed"]
+        self.direction=180
+        if self.x < self.speed :
+            model["charge_flow"] += 1
+            self.charged = True
+        elif self.charged:
+            model["charge_flow"] -= 1
+            self.charged = False
+        for b in self.agents_nearby(distance=10,agent_type=Nucleon):
+            self.point_towards(b.x,b.y)
+            self.direction -= 180
+        self.forward()
 
 class Nucleon(ag.Agent):
-    def __init__(self):
-        super().__init__()
+    def setup(self, model):
         self.size = 10
         self.set_color(255,0,0)
-        self.set("charged",False)
+
+    def step(self, model):
+        pass
 
 def setup(model):
     model.reset()
-    modello.set("speed",2)
-    modello.set("charge-flow",0)
+    model["speed"] = 2
+    model["charge_flow"] = 0
     electrons = set([Electron() for i in range(200)])
     model.add_agents(electrons)
-    nucleons = set([Nucleon() for i in range(200)])
+    nucleons = set([Nucleon() for i in range(50)])
     model.add_agents(nucleons)
-    for x in range(model.get_tile_n()):
-        for y in range(model.get_tile_n()):
-            model.get_tile(x,y).set_color(100,100,100)
+    for agent in model.get_agents():
+        agent.setup(model)
+    for tile in model.get_all_tiles():
+        tile.set_color(100,100,100)
 
-def go(agent):
-    agent.speed=modello.get("speed")
-    agent.direction=180
-    if isinstance(agent,Electron):
-        if agent.x < agent.speed :
-            modello.set("charge-flow",1+modello.get("charge-flow"))
-            agent.set("charged",True)
-        elif agent.get("charged"):
-            modello.set("charge-flow",modello.get("charge-flow")-1)
-            agent.set("charged",False)
-        for b in agent.in_range(10):
-            if isinstance(b,Nucleon):
-                agent.point_to(b.x,b.y)
-                agent.direction -= 180
-        agent.move()
+def step(model):
+    for agent in model.get_agents():
+        agent.step(model)
 
-modello = ag.Model(50)
-modello.add_setup_button(setup)
-modello.add_run_button(go)
-modello.add_slider_button("speed",0.1,10)
+modello = ag.Model(400,200,50,25)
+modello.add_single_button("Setup", setup)
+modello.add_toggle_button("Go", step)
+modello.add_slider_button("speed",0.1,3)
 modello.plot_variable("charge-flow",100,100,250)
 ag.Start()

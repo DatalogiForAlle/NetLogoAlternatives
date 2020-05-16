@@ -6,19 +6,39 @@ from pyglet.window import mouse
 def RNG(maximum):
     return random.randint(0,maximum)
 
-class Agent():
+class Agent(dict):
     def __init__(self):
+        # Associated simulation area.
         self.__area = None
-        self.__info = {}
-        self.x = 0
-        self.y = 0
-        self.size = 6
-        self.direction = random.randint(0,359)
-        self.speed = 1
+
+        # Destroyed agents are not drawn and are removed from their area.
         self.__destroyed = False
+
+        # Number of edges in the regular polygon representing the agent.
         self.__resolution = 10
+
+        # Color of the agent in RGB.
         self.__color = [RNG(255),RNG(255),RNG(255)]
 
+        self.x = 0
+        self.y = 0
+        self.size = 1
+        self.direction = random.randint(0,359)
+        self.speed = 1
+
+    def __render_x(self):
+        return self.__area.x + self.x
+
+    def __render_y(self):
+        return self.__area.y + self.y
+
+    # Ensures that the agent stays inside the simulation area.
+    def __wraparound(self):
+        self.x = self.x % self.__area.w
+        self.y = self.y % self.__area.h
+
+    # Sets up the internal vertex list used for drawing
+    # (part of the pyglet library).
     def init_render(self):
         rx = self.__render_x()
         ry = self.__render_y()
@@ -39,9 +59,16 @@ class Agent():
             ('c3B', self.__color * (self.__resolution+1))
         )
 
-    def __wraparound(self):
-        self.x = self.x % self.__area.w
-        self.y = self.y % self.__area.h
+    def render(self):
+        x = self.__render_x()
+        y = self.__render_y()
+        vertices = [x,y]
+        for i in range(self.__resolution):
+            a = i * (2 * math.pi) / self.__resolution
+            vertices.append(x + math.cos(a) * self.size)
+            vertices.append(y + math.sin(a) * self.size)
+        self.__vertex_list.vertices = vertices
+        self.__vertex_list.colors = self.__color * (self.__resolution+1)
 
     def jump_to(self, x, y):
         self.x = x
@@ -51,20 +78,14 @@ class Agent():
     def set_area(self, area):
         self.__area = area
 
-    def get(self, var):
-        return self.__info[var]
-
-    def set(self, var, val):
-        self.__info[var] = val
-
-    def point_to(self, other_x, other_y):
+    def point_towards(self, other_x, other_y):
         dist = self.distance_to(other_x,other_y)
         if dist > 0:
             self.direction = math.degrees(math.acos((other_x - self.x) / dist))
             if (self.y - other_y) > 0:
                 self.direction = 360 - self.direction
 
-    def move(self):
+    def forward(self):
         self.x += math.cos(math.radians(self.direction)) * self.speed
         self.y += math.sin(math.radians(self.direction)) * self.speed
         self.__wraparound()
@@ -72,11 +93,12 @@ class Agent():
     def distance_to(self, other_x, other_y):
         return ((self.x-other_x)**2 + (self.y-other_y)**2)**0.5
 
-    def in_range(self, r):
+    def agents_nearby(self, distance, agent_type=None):
         nearby = set()
         for a in self.__area.agents:
-            if self.distance_to(a.x,a.y) <= r:
-                nearby.add(a)
+            if self.distance_to(a.x,a.y) <= distance:
+                if type == None or type(a) is agent_type:
+                    nearby.add(a)
         return nearby
 
     def current_tile(self):
@@ -92,25 +114,8 @@ class Agent():
             self.__destroyed = True
             self.__vertex_list.delete()
 
-    def __render_x(self):
-        return self.__area.x + self.x
-
-    def __render_y(self):
-        return self.__area.y + self.y
-
     def set_color(self, r, g, b):
         self.__color = [r,g,b]
-
-    def render(self):
-        x = self.__render_x()
-        y = self.__render_y()
-        vertices = [x,y]
-        for i in range(self.__resolution):
-            a = i * (2 * math.pi) / self.__resolution
-            vertices.append(x + math.cos(a) * self.size)
-            vertices.append(y + math.sin(a) * self.size)
-        self.__vertex_list.vertices = vertices
-        self.__vertex_list.colors = self.__color * (self.__resolution+1)
 
 class Tile():
     def __init__(self,x,y,w,h,area):
@@ -150,14 +155,15 @@ class Tile():
             self._vertex_list.colors[i*3+2] = b
 
 class SimulationArea():
-    def __init__(self, x, y, w, h, n_tiles, batch):
+    def __init__(self, x, y, w, h, x_tiles, y_tiles, batch):
         self.x = x
         self.y = y
         self.w = w
         self.h = h
         self.agents = set()
-        self.n_tiles = n_tiles
-        self.tiles = [[None for x in range(n_tiles)] for y in range(n_tiles)]
+        self.x_tiles = x_tiles
+        self.y_tiles = y_tiles
+        self.tiles = [[None for x in range(x_tiles)] for y in range(y_tiles)]
         self.batch = batch
         self.agent_group = pyglet.graphics.OrderedGroup(2)
         self.tile_group = pyglet.graphics.OrderedGroup(1)
@@ -177,27 +183,28 @@ class SimulationArea():
         for a in self.agents:
             a.destroy()
         self.agents.clear()
-        tile_w = self.w / self.n_tiles
-        tile_h = self.h / self.n_tiles
-        for x in range(0,self.n_tiles):
-            for y in range(0,self.n_tiles):
-                self.tiles[x][y] = Tile(x*tile_w,y*tile_h,tile_w,tile_h,self)
+        tile_w = self.w / self.x_tiles
+        tile_h = self.h / self.y_tiles
+        for y in range(0,self.y_tiles):
+            for x in range(0,self.x_tiles):
+                self.tiles[y][x] = Tile(self.x+x*tile_w,
+                                        self.y+y*tile_h,
+                                        tile_w,tile_h,self)
 
     def render(self):
         for a in self.agents:
             a.render()
         self.batch.draw()
 
-class Model():
-    def __init__(self, n_tiles):
+class Model(dict):
+    def __init__(self, width, height, x_tiles, y_tiles):
         global AgentWindow
         self._buttons = set()
         self._bg_group = pyglet.graphics.OrderedGroup(0)
         self._button_group = pyglet.graphics.OrderedGroup(3)
         self._label_group = pyglet.graphics.OrderedGroup(4)
         self._render_batch = pyglet.graphics.Batch()
-        self.__area = SimulationArea(0,0,400,400,n_tiles,self._render_batch)
-        self._globals = {}
+        self.__area = SimulationArea(0,100,width,height,x_tiles,y_tiles,self._render_batch)
         win_size = AgentWindow.get_size()
         self._render_batch.add_indexed(
             4, pyglet.gl.GL_TRIANGLES, self._bg_group,
@@ -248,15 +255,6 @@ class Model():
     def add_agents(self, agents):
         self.__area.add_agents(agents)
 
-    def get(self, var):
-        return self._globals[var]
-
-    def set(self, var, val):
-        self._globals[var] = val
-
-    def has(self, var):
-        return var in self._globals
-
     def get_agents(self):
         return self.__area.agents
 
@@ -265,6 +263,13 @@ class Model():
 
     def get_tile_n(self):
         return self.__area.n_tiles
+
+    def get_all_tiles(self):
+        tileset = set()
+        for y in range(self.__area.y_tiles):
+            for x in range(self.__area.x_tiles):
+                tileset.add(self.__area.tiles[y][x])
+        return tileset
 
     def reset(self):
         self.__area.reset()
@@ -280,12 +285,11 @@ class Model():
     def update(self, dt):
         for b in self._buttons:
             b.update()
-            if type(b) is ButtonToggle or type(b) is ButtonRun:
+            if type(b) is ButtonToggle:
                 if b.active:
-                    for a in self.get_agents():
-                        b.func(a)
+                    b.func(self)
             if type(b) is ButtonSlider:
-                self._globals[b.variable] = b.get_value()
+                self[b.variable] = b.get_value()
         self._graph.update()
 
     def get_render_batch(self):
@@ -305,22 +309,6 @@ class Model():
         for a in self.__area.agents:
             a.render()
         self._graph.render()
-
-    def add_setup_button(self, func):
-        button_count = len(self._buttons)
-        self._buttons.add(
-            ButtonSetup(
-                440+(button_count%2)*180,
-                16+math.floor(button_count/2)*76,
-                140,56,self,func))
-
-    def add_run_button(self, func):
-        button_count = len(self._buttons)
-        self._buttons.add(
-            ButtonRun(
-                440+(button_count%2)*180,
-                16+math.floor(button_count/2)*76,
-                140,56,self,func))
 
     def add_single_button(self, label, func):
         button_count = len(self._buttons)
@@ -427,14 +415,6 @@ class Button():
                            and (my < self._y + self._h))
 
     def on_click(self):
-        for a in self.model.get_agents():
-            self.func(a)
-
-class ButtonSetup(Button):
-    def __init__(self, x, y, w, h, model, f):
-        super().__init__(x,y,w,h,"Setup",model,f)
-
-    def on_click(self):
         self.func(self.model)
 
 class ButtonToggle(Button):
@@ -477,10 +457,6 @@ class ButtonToggle(Button):
 
     def on_click(self):
         self.active = not self.active
-
-class ButtonRun(ButtonToggle):
-    def __init__(self, x, y, w, h, model, f):
-        super().__init__(x,y,w,h,"Run",model,f)
 
 class SliderHandle(Button):
     def __init__(self, x, y, w, model):
@@ -682,7 +658,7 @@ class Graph():
         mx = self.maximum()
         self._ticks += 1
         for var in self._variables:
-            if self._model.has(var):
+            if var in self._model:
                 self._values[var].append(self._model.get(var))
                 if len(self._values[var]) > 1:
                     delta = (self._w-10) / (len(self._values[var])-1)
