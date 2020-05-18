@@ -6,7 +6,7 @@ from pyglet.window import mouse
 def RNG(maximum):
     return random.randint(0,maximum)
 
-class Agent(dict):
+class Agent():
     def __init__(self):
         # Associated simulation area.
         self.__area = None
@@ -37,8 +37,8 @@ class Agent(dict):
         self.x = self.x % self.__area.w
         self.y = self.y % self.__area.h
 
-    # Sets up the internal vertex list used for drawing
-    # (part of the pyglet library).
+    # Sets up the internal vertex list used for drawing (part of the pyglet library).
+    # Must be called before `render`!
     def init_render(self):
         rx = self.__render_x()
         ry = self.__render_y()
@@ -59,6 +59,9 @@ class Agent(dict):
             ('c3B', self.__color * (self.__resolution+1))
         )
 
+    # Updates the internal vertex list based on current coordinates.
+    # Does not actually perform the drawing! This is done by calling .draw()
+    # on the batch that contains the vertex list.
     def render(self):
         x = self.__render_x()
         y = self.__render_y()
@@ -93,6 +96,8 @@ class Agent(dict):
     def distance_to(self, other_x, other_y):
         return ((self.x-other_x)**2 + (self.y-other_y)**2)**0.5
 
+    # Returns a list of nearby agents.
+    # May take a type as argument and only return agents of that type.
     def agents_nearby(self, distance, agent_type=None):
         nearby = set()
         for a in self.__area.agents:
@@ -123,11 +128,14 @@ class Tile():
         self.y = y
         self._w = w
         self._h = h
-        self._area = area
-        self._info = {}
-        self.color = (0,0,0)
-        self._vertex_list = self._area.batch.add_indexed(
-            4, pyglet.gl.GL_TRIANGLES, self._area.tile_group,
+        self.info = {}
+
+        # Associated simulation area.
+        self.__area = area
+
+        # Internal vertex list used for rendering.
+        self._vertex_list = self.__area.batch.add_indexed(
+            4, pyglet.gl.GL_TRIANGLES, self.__area.tile_group,
             [0,1,2,0,2,3],
             ('v2f', [self.x,self.y,
                      self.x+self._w,self.y,
@@ -136,20 +144,10 @@ class Tile():
             ('c3B', [0,0,0,
                      0,0,0,
                      0,0,0,
-                     0,0,0])
-        )
-
-    def get(self, var):
-        return self._info[var]
-
-    def set(self, var, val):
-        self._info[var] = val
-
-    def render(self):
-        pass
+                     0,0,0]))
 
     def set_color(self, r, g, b):
-        for i in range(4):
+         for i in range(4):
             self._vertex_list.colors[i*3] = r
             self._vertex_list.colors[i*3+1] = g
             self._vertex_list.colors[i*3+2] = b
@@ -160,13 +158,28 @@ class SimulationArea():
         self.y = y
         self.w = w
         self.h = h
-        self.agents = set()
-        self.x_tiles = x_tiles
-        self.y_tiles = y_tiles
-        self.tiles = [[None for x in range(x_tiles)] for y in range(y_tiles)]
+
+        # Rendering batch for all internal tiles and agents.
         self.batch = batch
+
+        # Layering groups.
         self.agent_group = pyglet.graphics.OrderedGroup(2)
         self.tile_group = pyglet.graphics.OrderedGroup(1)
+
+        # Internal set of agents.
+        self.agents = set()
+
+        # Number of tiles on the x/y axis.
+        self.x_tiles = x_tiles
+        self.y_tiles = y_tiles
+
+        # Initial tileset (empty).
+        tile_w = self.w / self.x_tiles
+        tile_h = self.h / self.y_tiles
+        self.tiles = [
+            [Tile(self.x+x*tile_w,self.y+y*tile_h,tile_w,tile_h,self)
+             for x in range(x_tiles)]
+            for y in range(y_tiles)]
 
     def add_agent(self, agent):
         agent.set_area(self)
@@ -179,18 +192,19 @@ class SimulationArea():
         for a in agents:
             self.add_agent(a)
 
+    # Destroys all agents, clears the agent set, and resets all tiles.
     def reset(self):
         for a in self.agents:
             a.destroy()
         self.agents.clear()
         tile_w = self.w / self.x_tiles
         tile_h = self.h / self.y_tiles
-        for y in range(0,self.y_tiles):
-            for x in range(0,self.x_tiles):
-                self.tiles[y][x] = Tile(self.x+x*tile_w,
-                                        self.y+y*tile_h,
-                                        tile_w,tile_h,self)
+        self.tiles = [
+            [Tile(self.x+x*tile_w,self.y+y*tile_h,tile_w,tile_h,self)
+             for x in range(self.x_tiles)]
+            for y in range(self.y_tiles)]
 
+    # Draws any existing agents and tiles.
     def render(self):
         for a in self.agents:
             a.render()
@@ -199,12 +213,18 @@ class SimulationArea():
 class Model(dict):
     def __init__(self, width, height, x_tiles, y_tiles):
         global AgentWindow
+
+        # Set containing all buttons for this model.
+
         self._buttons = set()
+        # Layering groups.
         self._bg_group = pyglet.graphics.OrderedGroup(0)
         self._button_group = pyglet.graphics.OrderedGroup(3)
         self._label_group = pyglet.graphics.OrderedGroup(4)
+
+        # Rendering batch for all buttons
         self._render_batch = pyglet.graphics.Batch()
-        self.__area = SimulationArea(0,100,width,height,x_tiles,y_tiles,self._render_batch)
+        self.__area = SimulationArea(0,0,width,height,x_tiles,y_tiles,self._render_batch)
         win_size = AgentWindow.get_size()
         self._render_batch.add_indexed(
             4, pyglet.gl.GL_TRIANGLES, self._bg_group,
@@ -259,10 +279,18 @@ class Model(dict):
         return self.__area.agents
 
     def get_tile(self, x, y):
-        return self.__area.tiles[x][y]
+        return self.__area.tiles[y][x]
 
-    def get_tile_n(self):
-        return self.__area.n_tiles
+    def get_tile_from_cd(self, x, y):
+        x = round(self.__area.x_tiles * x / self.__area.w) % self.__area.x_tiles
+        y = round(self.__area.y_tiles * y / self.__area.h) % self.__area.y_tiles
+        return self.__area.tiles[y][x]
+
+    def get_tiles_xy(self):
+        return (self.__area.x_tiles,self.__area.y_tiles)
+
+    def get_area_size(self):
+        return (self.__area.w,self.__area.h)
 
     def get_all_tiles(self):
         tileset = set()
