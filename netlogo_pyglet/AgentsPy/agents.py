@@ -34,8 +34,12 @@ class Agent():
 
     # Ensures that the agent stays inside the simulation area.
     def __wraparound(self):
+        """
         self.x = self.x % self.__area.w
         self.y = self.y % self.__area.h
+        """
+        self.x = ((self.x - self.size) % (self.__area.w - self.size * 2)) + self.size
+        self.y = ((self.y - self.size) % (self.__area.h - self.size * 2)) + self.size
 
     # Sets up the internal vertex list used for drawing (part of the pyglet library).
     # Must be called before `render`!
@@ -72,11 +76,11 @@ class Agent():
             vertices.append(y + math.sin(a) * self.size)
         self.__vertex_list.vertices = vertices
         self.__vertex_list.colors = self.__color * (self.__resolution+1)
+        self.__wraparound()
 
     def jump_to(self, x, y):
         self.x = x
         self.y = y
-        self.__wraparound()
 
     def set_area(self, area):
         self.__area = area
@@ -91,7 +95,6 @@ class Agent():
     def forward(self):
         self.x += math.cos(math.radians(self.direction)) * self.speed
         self.y += math.sin(math.radians(self.direction)) * self.speed
-        self.__wraparound()
 
     def distance_to(self, other_x, other_y):
         return ((self.x-other_x)**2 + (self.y-other_y)**2)**0.5
@@ -107,9 +110,21 @@ class Agent():
         return nearby
 
     def current_tile(self):
-        x = floor(len(self.model.tiles) * self.x / self.__area.w)
-        y = floor(len(self.model.tiles) * self.y / self.__area.h)
+        (tx,ty) = self.model.get_tiles_xy()
+        x = floor(tx * self.x / self.__area.w)
+        y = floor(ty * self.y / self.__area.h)
         return self.__area.tiles[x][y]
+
+    # Returns the surrounding tiles as a 3x3 grid. Includes the current tile.
+    def neighbor_tiles(self):
+        tileset = [[None for y in range(3)] for x in range(3)]
+        (tx,ty) = self.model.get_tiles_xy()
+        for y in range(3):
+            for x in range(3):
+                x = (floor(tx * self.x / self.__area.w)+x-1) % tx
+                y = (floor(ty * self.y / self.__area.h)+y-1) % ty
+                tileset[x][y] = self.__area.tiles[x][y]
+        return tileset
 
     def is_destroyed(self):
         return self.__destroyed
@@ -178,8 +193,8 @@ class SimulationArea():
         tile_h = self.h / self.y_tiles
         self.tiles = [
             [Tile(self.x+x*tile_w,self.y+y*tile_h,tile_w,tile_h,self)
-             for x in range(x_tiles)]
-            for y in range(y_tiles)]
+             for y in range(y_tiles)]
+            for x in range(x_tiles)]
 
     def add_agent(self, agent):
         agent.set_area(self)
@@ -199,10 +214,10 @@ class SimulationArea():
         self.agents.clear()
         tile_w = self.w / self.x_tiles
         tile_h = self.h / self.y_tiles
-        self.tiles = [
-            [Tile(self.x+x*tile_w,self.y+y*tile_h,tile_w,tile_h,self)
-             for x in range(self.x_tiles)]
-            for y in range(self.y_tiles)]
+        for x in range(self.x_tiles):
+            for y in range(self.y_tiles):
+                self.tiles[x][y].set_color(0,0,0)
+                self.tiles[x][y].info = {}
 
     # Draws any existing agents and tiles.
     def render(self):
@@ -242,6 +257,8 @@ class Model(dict):
         self.reset()
         pyglet.clock.schedule_interval(self.update, 0.02)
 
+        # These can only be declared once, so technically,
+        # only one model can be active/functional at a time.
         @AgentWindow.event
         def on_draw():
             AgentWindow.clear()
@@ -278,38 +295,45 @@ class Model(dict):
     def get_agents(self):
         return self.__area.agents
 
-    def get_tile(self, x, y):
-        return self.__area.tiles[y][x]
+    # Gets a specified tile based on its index in the tile grid.
+    def get_tile_index(self, x, y):
+        return self.__area.tiles[x][y]
 
-    def get_tile_from_cd(self, x, y):
+    # Gets the tile closes to the specified coordinate point.
+    def get_tile(self, x, y):
         x = round(self.__area.x_tiles * x / self.__area.w) % self.__area.x_tiles
         y = round(self.__area.y_tiles * y / self.__area.h) % self.__area.y_tiles
-        return self.__area.tiles[y][x]
+        return self.__area.tiles[x][y]
 
+    # Returns the number of tiles as a width * height tuple.
     def get_tiles_xy(self):
         return (self.__area.x_tiles,self.__area.y_tiles)
 
+    # Returns the size of the area in pixels as a width * height tuple.
     def get_area_size(self):
         return (self.__area.w,self.__area.h)
 
+    # Returns a set of all tiles.
     def get_all_tiles(self):
         tileset = set()
-        for y in range(self.__area.y_tiles):
-            for x in range(self.__area.x_tiles):
-                tileset.add(self.__area.tiles[y][x])
+        for x in range(self.__area.x_tiles):
+            for y in range(self.__area.y_tiles):
+                tileset.add(self.__area.tiles[x][y])
         return tileset
 
+    # Resets the simulation area and graph.
     def reset(self):
         self.__area.reset()
         self._graph.reset()
 
+    # Declares a variable to be plotted in the graph.
     def plot_variable(self, label, r, g, b):
         self._graph.add_variable(label, r, g, b)
 
     def update_plot(self):
-        pass
-        #self.__update_graph_flag = True
+        self._graph.update()
 
+    # Updates all associated buttons and the graph.
     def update(self, dt):
         for b in self._buttons:
             b.update()
@@ -318,26 +342,32 @@ class Model(dict):
                     b.func(self)
             if type(b) is ButtonSlider:
                 self[b.variable] = b.get_value()
-        self._graph.update()
 
+    # Gets the rendering batch (used for pyglet rendering).
     def get_render_batch(self):
         return self._render_batch
 
+    # Gets the background layer.
     def get_background_group(self):
         return self._bg_group
 
+    # Gets the button layer.
     def get_button_group(self):
         return self._button_group
 
+    # Gets the label layer.
     def get_label_group(self):
         return self._label_group
 
+    # Renders all entities associated with the internal rendering batch.
+    # Also renders the graph.
     def render(self):
         self._render_batch.draw()
         for a in self.__area.agents:
             a.render()
         self._graph.render()
 
+    # Adds a button with a function that runs when the button is clicked.
     def add_single_button(self, label, func):
         button_count = len(self._buttons)
         self._buttons.add(
@@ -346,6 +376,7 @@ class Model(dict):
                 16+math.floor(button_count/2)*76,
                 140,56,label,self,func))
 
+    # Adds a toggleable button with a function that runs when the button is active.
     def add_toggle_button(self, label, func):
         button_count = len(self._buttons)
         self._buttons.add(
@@ -354,6 +385,7 @@ class Model(dict):
                 16+math.floor(button_count/2)*76,
                 140,56,label,self,func))
 
+    # Adds a button with a slider that can adjust a value associated with the model.
     def add_slider_button(self, label, min, max):
         button_count = len(self._buttons)
         self._buttons.add(
@@ -362,6 +394,8 @@ class Model(dict):
                 16+math.floor(button_count/2)*76,
                 140,56,label,self,min,max))
 
+# Should not be created directly by the user.
+# Instead instantiate using model.add_single_button.
 class Button():
     def __init__(self, x, y, w, h, label, model, f):
         self._x = x
@@ -445,6 +479,8 @@ class Button():
     def on_click(self):
         self.func(self.model)
 
+# Should not be created directly by the user.
+# Instead instantiate using model.add_toggle_button.
 class ButtonToggle(Button):
     def __init__(self, x, y, w, h, label, model, f):
         super().__init__(x, y, w, h, label, model, f)
@@ -486,6 +522,7 @@ class ButtonToggle(Button):
     def on_click(self):
         self.active = not self.active
 
+# Helper class for the button slider.
 class SliderHandle(Button):
     def __init__(self, x, y, w, model):
         self.x = x
@@ -573,6 +610,8 @@ class SliderHandle(Button):
             70,70,70
         ]
 
+# Should not be created directly by the user.
+# Instead instantiate using model.add_slider_button.
 class ButtonSlider(Button):
     def __init__(self, x, y, w, h, label, model, min, max):
         super().__init__(x, y, w, h, label, model, None)
@@ -634,6 +673,8 @@ class ButtonSlider(Button):
     def on_click(self):
         pass
 
+# Internal graph class used by the model.
+# Should not be created directly by the user.
 class Graph():
     def __init__(self, x, y, w, h, model):
         self._x = x
@@ -663,12 +704,32 @@ class Graph():
         self._batch.add_indexed(
             3, pyglet.gl.GL_LINES, self._model.get_label_group(),
             [0,1,1,2],
-            ('v2f', [self._x+5, self._y+self._h-5,
-                     self._x+5, self._y+5,
+            ('v2f', [self._x+40, self._y+self._h-5,
+                     self._x+40, self._y+5,
                      self._x+self._w-5, self._y+5]),
             ('c3B', (255,255,255,
                      255,255,255,
                      255,255,255))
+        )
+        self._min_label = pyglet.text.Label(
+            "",
+            font_name='Courier New',
+            font_size=8,
+            x=self._x+20, y=self._y+10,
+            anchor_x='center', anchor_y='center',
+            batch=self._batch,
+            color=(255,255,255,255),
+            group=model.get_label_group()
+        )
+        self._max_label = pyglet.text.Label(
+            "",
+            font_name='Courier New',
+            font_size=8,
+            x=self._x+20, y=self._y+self._h-10,
+            anchor_x='center', anchor_y='center',
+            batch=self._batch,
+            color=(255,255,255,255),
+            group=model.get_label_group()
         )
 
     def add_variable(self, label, r, g, b):
@@ -683,25 +744,29 @@ class Graph():
 
     def update(self):
         mn = self.minimum()
+        if mn:
+            self._min_label.text = '{:3.2f}'.format(mn)
         mx = self.maximum()
+        if mx:
+            self._max_label.text = '{:03f}'.format(mx)
         self._ticks += 1
         for var in self._variables:
             if var in self._model:
                 self._values[var].append(self._model.get(var))
                 if len(self._values[var]) > 1:
-                    delta = (self._w-10) / (len(self._values[var])-1)
+                    delta = (self._w-45) / (len(self._values[var])-1)
                     diff = mx - mn
                     if diff == 0:
                         diff = 0.5
                     c = self._colors[var]
                     vertices=[
-                        self._x+5, self._y+5 + (self._h-10) * (self._values[var][0] - mn) / diff
+                        self._x+40, self._y+5 + (self._h-10) * (self._values[var][0] - mn) / diff
                     ]
                     indices=[0]
                     colors=[c[0],c[1],c[2]]
                     for i in range(len(self._values[var][1:])):
                         vertices.extend(
-                            [self._x+5 + delta*(i+1),
+                            [self._x+40 + delta*(i+1),
                              self._y+5 + (self._h-10) * (self._values[var][i+1] - mn) / diff])
                         colors.extend([c[0],c[1],c[2]])
                         indices.extend([i+1])

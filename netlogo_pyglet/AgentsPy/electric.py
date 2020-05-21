@@ -11,12 +11,8 @@ class Electron(ag.Agent):
     def step(self, model):
         self.speed=model["speed"]
         self.direction=180
-        if self.x < self.speed :
+        if self.x < self.speed+self.size:
             model["charge_flow"] += 1
-            self.charged = True
-        elif self.charged:
-            model["charge_flow"] -= 1
-            self.charged = False
         for b in self.agents_nearby(distance=10,agent_type=Nucleon):
             self.point_towards(b.x,b.y)
             self.direction -= 180
@@ -44,8 +40,12 @@ def setup(model):
         tile.set_color(100,100,100)
 
 def step(model):
+    old_charge_flow = model["charge_flow"]
+    model["charge_flow"] = 0
     for agent in model.get_agents():
         agent.step(model)
+    model["charge_flow"] = model["charge_flow"] * 0.01 + old_charge_flow * 0.99 
+    model.update_plot()
 
 modello = ag.Model(400,200,50,25)
 modello.add_single_button("Setup", setup)
