@@ -104,8 +104,8 @@ class Agent():
     def agents_nearby(self, distance, agent_type=None):
         nearby = set()
         for a in self.__area.agents:
-            if self.distance_to(a.x,a.y) <= distance:
-                if type == None or type(a) is agent_type:
+            if self.distance_to(a.x,a.y) <= distance and not (a is self):
+                if agent_type == None or type(a) is agent_type:
                     nearby.add(a)
         return nearby
 
@@ -690,7 +690,7 @@ class Graph():
         self._batch = pyglet.graphics.Batch()
 
         self._batch.add_indexed(
-            4, pyglet.gl.GL_TRIANGLES, self._model.get_button_group(),
+            4, pyglet.gl.GL_TRIANGLES, None,
             [0,1,2,0,2,3],
             ('v2f', (self._x,self._y,
                      self._x+self._w, self._y,
@@ -701,11 +701,10 @@ class Graph():
                      0,0,0,
                      0,0,0))
         )
-        self._batch.add_indexed(
-            3, pyglet.gl.GL_LINES, self._model.get_label_group(),
-            [0,1,1,2],
-            ('v2f', [self._x+40, self._y+self._h-5,
-                     self._x+40, self._y+5,
+        self._batch.add(
+            3, pyglet.gl.GL_LINE_STRIP, pyglet.graphics.OrderedGroup(5),
+            ('v2f', [self._x+50, self._y+self._h-5,
+                     self._x+50, self._y+5,
                      self._x+self._w-5, self._y+5]),
             ('c3B', (255,255,255,
                      255,255,255,
@@ -715,7 +714,7 @@ class Graph():
             "",
             font_name='Courier New',
             font_size=8,
-            x=self._x+20, y=self._y+10,
+            x=self._x+25, y=self._y+10,
             anchor_x='center', anchor_y='center',
             batch=self._batch,
             color=(255,255,255,255),
@@ -725,7 +724,7 @@ class Graph():
             "",
             font_name='Courier New',
             font_size=8,
-            x=self._x+20, y=self._y+self._h-10,
+            x=self._x+25, y=self._y+self._h-10,
             anchor_x='center', anchor_y='center',
             batch=self._batch,
             color=(255,255,255,255),
@@ -737,8 +736,8 @@ class Graph():
         self._values[label] = []
         self._colors[label] = (r,g,b)
         self._vertex_lists[label] = self._batch.add_indexed(
-            1, pyglet.gl.GL_LINE_STRIP, self._model.get_label_group(),
-            [0],
+            1, pyglet.gl.GL_LINE_STRIP, pyglet.graphics.OrderedGroup(5),
+            [0,0],
             ('v2f', [0,0]),
             ('c3B', [0,0,0]))
 
@@ -748,28 +747,29 @@ class Graph():
             self._min_label.text = '{:3.2f}'.format(mn)
         mx = self.maximum()
         if mx:
-            self._max_label.text = '{:03f}'.format(mx)
+            self._max_label.text = '{:3.2f}'.format(mx)
         self._ticks += 1
         for var in self._variables:
             if var in self._model:
                 self._values[var].append(self._model.get(var))
                 if len(self._values[var]) > 1:
-                    delta = (self._w-45) / (len(self._values[var])-1)
+                    delta = (self._w-55) / (len(self._values[var])-1)
                     diff = mx - mn
                     if diff == 0:
                         diff = 0.5
                     c = self._colors[var]
                     vertices=[
-                        self._x+40, self._y+5 + (self._h-10) * (self._values[var][0] - mn) / diff
+                        self._x+50, self._y+5 + (self._h-10) * (self._values[var][0] - mn) / diff
                     ]
-                    indices=[0]
+                    indices=[0,0]
                     colors=[c[0],c[1],c[2]]
                     for i in range(len(self._values[var][1:])):
                         vertices.extend(
-                            [self._x+40 + delta*(i+1),
+                            [self._x+50 + delta*(i+1),
                              self._y+5 + (self._h-10) * (self._values[var][i+1] - mn) / diff])
                         colors.extend([c[0],c[1],c[2]])
                         indices.extend([i+1])
+                    indices.extend([len(self._values[var])-1])
                     self._vertex_lists[var].resize(len(vertices)//2,len(indices))
                     self._vertex_lists[var].vertices = vertices
                     self._vertex_lists[var].indices = indices
