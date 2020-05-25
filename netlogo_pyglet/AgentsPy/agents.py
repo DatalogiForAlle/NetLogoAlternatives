@@ -95,6 +95,7 @@ class Agent():
     def forward(self):
         self.x += math.cos(math.radians(self.direction)) * self.speed
         self.y += math.sin(math.radians(self.direction)) * self.speed
+        self.__wraparound()
 
     def distance_to(self, other_x, other_y):
         return ((self.x-other_x)**2 + (self.y-other_y)**2)**0.5
@@ -110,10 +111,12 @@ class Agent():
         return nearby
 
     def current_tile(self):
-        (tx,ty) = self.model.get_tiles_xy()
-        x = floor(tx * self.x / self.__area.w)
-        y = floor(ty * self.y / self.__area.h)
-        return self.__area.tiles[x][y]
+        x = math.floor(self.__area.x_tiles * self.x / self.__area.w)
+        y = math.floor(self.__area.y_tiles * self.y / self.__area.h)
+        try:
+            return self.__area.tiles[x][y]
+        except:
+            print(self.x,self.y,x,y)
 
     # Returns the surrounding tiles as a 3x3 grid. Includes the current tile.
     def neighbor_tiles(self):
@@ -314,7 +317,7 @@ class Model(dict):
         return (self.__area.w,self.__area.h)
 
     # Returns a set of all tiles.
-    def get_all_tiles(self):
+    def get_tiles(self):
         tileset = set()
         for x in range(self.__area.x_tiles):
             for y in range(self.__area.y_tiles):
@@ -736,7 +739,7 @@ class Graph():
         self._values[label] = []
         self._colors[label] = (r,g,b)
         self._vertex_lists[label] = self._batch.add_indexed(
-            1, pyglet.gl.GL_LINE_STRIP, pyglet.graphics.OrderedGroup(5),
+            1, pyglet.gl.GL_LINE_STRIP, pyglet.graphics.OrderedGroup(len(self._variables)+10),
             [0,0],
             ('v2f', [0,0]),
             ('c3B', [0,0,0]))
