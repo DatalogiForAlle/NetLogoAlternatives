@@ -18,7 +18,7 @@ class Person(ag.Agent):
     def setup(self, model):
         self.set_color(50,150,50)
         self.immune = False
-        self.size = 5
+        self.size = 10
         self.infection = 0
         model["normal"] += 1
         if (ag.RNG(100) < 5):
@@ -74,8 +74,13 @@ def step(model):
             t.set_color(0,50,0)
     model.update_plot()
 
+def direction(model):
+    for a in model.get_agents():
+        a.show_direction = not a.show_direction
+
 epidemic_model = ag.Model(400,400,50,50)
 epidemic_model.add_single_button("setup", setup)
+epidemic_model.add_single_button("show direction", direction)
 epidemic_model.add_toggle_button("go", step)
 epidemic_model.add_slider_button("movespeed", 0, 1)
 epidemic_model.add_slider_button("decay", 0, 3)

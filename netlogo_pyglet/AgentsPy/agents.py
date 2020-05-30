@@ -6,6 +6,18 @@ from pyglet.window import mouse
 def RNG(maximum):
     return random.randint(0,maximum)
 
+class Color():
+    def __init__(self, r=0, g=0, b=0):
+        self.color = [r,g,b]
+
+    def get_color(self):
+        return self.__color
+
+    def set_color(self, rgb):
+        self.__color = rgb
+
+    color = property(get_color,set_color)
+
 class Agent():
     def __init__(self):
         # Associated simulation area.
@@ -18,13 +30,19 @@ class Agent():
         self.__resolution = 10
 
         # Color of the agent in RGB.
+        self.__color = Color()
         self.__color = [RNG(255),RNG(255),RNG(255)]
+
+        # Current tile. Should not be accessed by clients, please use the method
+        # current_tile() instead.
+        self.__current_tile = None
 
         self.x = 0
         self.y = 0
-        self.size = 1
+        self.size = 10
         self.direction = random.randint(0,359)
         self.speed = 1
+        self.show_direction = False
 
     def __render_x(self):
         return self.__area.x + self.x
@@ -32,36 +50,40 @@ class Agent():
     def __render_y(self):
         return self.__area.y + self.y
 
+    # Update current tile
+    def __update_current_tile(self):
+        new_tile = self.current_tile()
+        if not self.__current_tile:
+            self.__current_tile = self.current_tile()
+            self.__current_tile.add_agent(self)
+        elif not (self.__current_tile is new_tile):
+            self.__current_tile.remove_agent(self)
+            new_tile.add_agent(self)
+            self.__current_tile = new_tile
+
     # Ensures that the agent stays inside the simulation area.
     def __wraparound(self):
-        """
-        self.x = self.x % self.__area.w
-        self.y = self.y % self.__area.h
-        """
         self.x = ((self.x - self.size) % (self.__area.w - self.size * 2)) + self.size
         self.y = ((self.y - self.size) % (self.__area.h - self.size * 2)) + self.size
+
+    # To be called after each movement step
+    def __post_move(self):
+        self.__wraparound()
+        self.__update_current_tile()
 
     # Sets up the internal vertex list used for drawing (part of the pyglet library).
     # Must be called before `render`!
     def init_render(self):
-        rx = self.__render_x()
-        ry = self.__render_y()
-        vertices = [rx,ry]
-        indices = []
-        for i in range(self.__resolution):
-            a = i * (2 * math.pi) / self.__resolution
-            vertices.append(rx + math.cos(a) * self.size)
-            vertices.append(ry + math.sin(a) * self.size)
-            if i < (self.__resolution-1):
-                indices.extend([0, i+1, i+2])
-            else:
-                indices.extend([0, i+1, 1])
+        x = self.__render_x()
+        y = self.__render_y()
         self.__vertex_list = self.__area.batch.add_indexed(
-            self.__resolution+1, pyglet.gl.GL_TRIANGLES, self.__area.agent_group,
-            indices,
-            ('v2f', vertices),
-            ('c3B', self.__color * (self.__resolution+1))
+            3, pyglet.gl.GL_TRIANGLES,
+            pyglet.graphics.OrderedGroup(len(self.__area.agents)+100),
+            [0,1,2],
+            ('v2f', [x,y+self.size,x-self.size,y,x+self.size,y]),
+            ('c3B', self.__color * 3)
         )
+        self.__wraparound()
 
     # Updates the internal vertex list based on current coordinates.
     # Does not actually perform the drawing! This is done by calling .draw()
@@ -69,18 +91,55 @@ class Agent():
     def render(self):
         x = self.__render_x()
         y = self.__render_y()
-        vertices = [x,y]
-        for i in range(self.__resolution):
-            a = i * (2 * math.pi) / self.__resolution
-            vertices.append(x + math.cos(a) * self.size)
-            vertices.append(y + math.sin(a) * self.size)
+        d = math.radians(self.direction)
+        vertices = []
+        indices = []
+        colors = []
+        if self.show_direction:
+            indices = [0,1,2,0,2,3]
+            colors = self.__color * 4
+            vertices.extend([x + math.cos(d) * self.size,
+                             y + math.sin(d) * self.size])
+            vertices.extend([x + math.cos(d+2.3) * self.size,
+                             y + math.sin(d+2.3) * self.size])
+            vertices.extend([x + math.cos(d+math.pi) * self.size/2,
+                             y + math.sin(d+math.pi) * self.size/2])
+            vertices.extend([x + math.cos(d-2.3) * self.size,
+                             y + math.sin(d-2.3) * self.size])
+        else:
+            vertices = [x,y]
+            colors = self.__color * (self.__resolution+1)
+            for i in range(self.__resolution):
+                a = i * (2 * math.pi) / self.__resolution
+                vertices.append(x + math.cos(a) * self.size)
+                vertices.append(y + math.sin(a) * self.size)
+                if i < (self.__resolution-1):
+                    indices.extend([0, i+1, i+2])
+                else:
+                    indices.extend([0, i+1, 1])
+        self.__vertex_list.resize(len(vertices)//2,len(indices))
         self.__vertex_list.vertices = vertices
-        self.__vertex_list.colors = self.__color * (self.__resolution+1)
-        self.__wraparound()
+        self.__vertex_list.indices = indices
+        self.__vertex_list.colors = colors
 
     def jump_to(self, x, y):
         self.x = x
         self.y = y
+        self.__post_move()
+
+    def jump_to_tile(self, tile):
+        self.x = tile.x
+        self.y = tile.y
+        self.align()
+        self.__post_move()
+
+    def align(self):
+        w = self.__area.w
+        h = self.__area.h
+        tx = self.__area.x_tiles
+        ty = self.__area.y_tiles
+        self.x = math.floor(self.x * tx / w) * w / tx + (w/tx)/2
+        self.y = math.floor(self.y * ty / h) * w / ty + (h/ty)/2
 
     def set_area(self, area):
         self.__area = area
@@ -118,6 +177,11 @@ class Agent():
         except:
             print(self.x,self.y,x,y)
 
+    def current_tile_index(self):
+        x = math.floor(self.__area.x_tiles * self.x / self.__area.w)
+        y = math.floor(self.__area.y_tiles * self.y / self.__area.h)
+        return (x,y)
+
     # Returns the surrounding tiles as a 3x3 grid. Includes the current tile.
     def neighbor_tiles(self):
         tileset = [[None for y in range(3)] for x in range(3)]
@@ -151,6 +215,9 @@ class Tile():
         # Associated simulation area.
         self.__area = area
 
+        # Agents placed on this tile.
+        self.__agents = set()
+
         # Internal vertex list used for rendering.
         self._vertex_list = self.__area.batch.add_indexed(
             4, pyglet.gl.GL_TRIANGLES, self.__area.tile_group,
@@ -163,6 +230,15 @@ class Tile():
                      0,0,0,
                      0,0,0,
                      0,0,0]))
+
+    def add_agent(self,agent):
+        self.__agents.add(agent)
+
+    def remove_agent(self,agent):
+        self.__agents.discard(agent)
+
+    def get_agents(self):
+        return self.__agents
 
     def set_color(self, r, g, b):
          for i in range(4):
@@ -181,7 +257,6 @@ class SimulationArea():
         self.batch = batch
 
         # Layering groups.
-        self.agent_group = pyglet.graphics.OrderedGroup(2)
         self.tile_group = pyglet.graphics.OrderedGroup(1)
 
         # Internal set of agents.
@@ -289,6 +364,10 @@ class Model(dict):
                 for b in self._buttons:
                     b.mouse_pressed = False
 
+    def set_update_interval(self, i):
+        pyglet.clock.unschedule(self.update)
+        pyglet.clock.schedule_interval(self.update, i)
+
     def add_agent(self, agent):
         self.__area.add_agent(agent)
 
@@ -300,7 +379,7 @@ class Model(dict):
 
     # Gets a specified tile based on its index in the tile grid.
     def get_tile_index(self, x, y):
-        return self.__area.tiles[x][y]
+        return self.__area.tiles[x % self.__area.x_tiles][y % self.__area.y_tiles]
 
     # Gets the tile closes to the specified coordinate point.
     def get_tile(self, x, y):
@@ -339,12 +418,9 @@ class Model(dict):
     # Updates all associated buttons and the graph.
     def update(self, dt):
         for b in self._buttons:
-            b.update()
             if type(b) is ButtonToggle:
                 if b.active:
                     b.func(self)
-            if type(b) is ButtonSlider:
-                self[b.variable] = b.get_value()
 
     # Gets the rendering batch (used for pyglet rendering).
     def get_render_batch(self):
@@ -365,9 +441,12 @@ class Model(dict):
     # Renders all entities associated with the internal rendering batch.
     # Also renders the graph.
     def render(self):
+        for b in self._buttons:
+            b.update()
+            if type(b) is ButtonSlider:
+                self[b.variable] = b.get_value()
+        self.__area.render()
         self._render_batch.draw()
-        for a in self.__area.agents:
-            a.render()
         self._graph.render()
 
     # Adds a button with a function that runs when the button is clicked.
