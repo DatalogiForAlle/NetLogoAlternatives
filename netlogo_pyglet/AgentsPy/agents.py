@@ -18,12 +18,12 @@ class Agent():
         self.__resolution = 10
 
         # Color of the agent in RGB.
-        self.__color = [RNG(255),RNG(255),RNG(255)]
+        self.__color = [RNG(255), RNG(255), RNG(255)]
 
         self.x = 0
         self.y = 0
         self.size = 1
-        self.direction = random.randint(0,359)
+        self.direction = RNG(359)
         self.speed = 1
 
     def __render_x(self):
@@ -137,8 +137,14 @@ class Agent():
             self.__destroyed = True
             self.__vertex_list.delete()
 
-    def set_color(self, r, g, b):
-        self.__color = [r,g,b]
+    @property
+    def color(self):
+        return self.__color
+
+    @color.setter
+    def color(self, color):
+        r, g, b = color
+        self.__color = [r, g, b]
 
 class Tile():
     def __init__(self,x,y,w,h,area):
@@ -164,8 +170,17 @@ class Tile():
                      0,0,0,
                      0,0,0]))
 
-    def set_color(self, r, g, b):
-         for i in range(4):
+    @property
+    def color(self):
+        r = self._vertex_list.colors[0]
+        g = self._vertex_list.colors[1]
+        b = self._vertex_list.colors[2]
+        return (r, g, b)
+
+    @color.setter
+    def color(self, color):
+        r, g, b = color
+        for i in range(4):
             self._vertex_list.colors[i*3] = r
             self._vertex_list.colors[i*3+1] = g
             self._vertex_list.colors[i*3+2] = b
@@ -219,7 +234,7 @@ class SimulationArea():
         tile_h = self.h / self.y_tiles
         for x in range(self.x_tiles):
             for y in range(self.y_tiles):
-                self.tiles[x][y].set_color(0,0,0)
+                self.tiles[x][y].color = (0,0,0)
                 self.tiles[x][y].info = {}
 
     # Draws any existing agents and tiles.
@@ -229,7 +244,7 @@ class SimulationArea():
         self.batch.draw()
 
 class Model(dict):
-    def __init__(self, width, height, x_tiles, y_tiles):
+    def __init__(self, x_tiles, y_tiles, tile_size=8):
         global AgentWindow
 
         # Set containing all buttons for this model.
@@ -240,6 +255,9 @@ class Model(dict):
         self._button_group = pyglet.graphics.OrderedGroup(3)
         self._label_group = pyglet.graphics.OrderedGroup(4)
 
+        width = x_tiles * tile_size
+        height = y_tiles * tile_size
+        
         # Rendering batch for all buttons
         self._render_batch = pyglet.graphics.Batch()
         self.__area = SimulationArea(0,0,width,height,x_tiles,y_tiles,self._render_batch)
@@ -295,7 +313,7 @@ class Model(dict):
     def add_agents(self, agents):
         self.__area.add_agents(agents)
 
-    def get_agents(self):
+    def agents(self):
         return self.__area.agents
 
     # Gets a specified tile based on its index in the tile grid.
@@ -317,7 +335,7 @@ class Model(dict):
         return (self.__area.w,self.__area.h)
 
     # Returns a set of all tiles.
-    def get_tiles(self):
+    def tiles(self):
         tileset = set()
         for x in range(self.__area.x_tiles):
             for y in range(self.__area.y_tiles):
@@ -343,6 +361,7 @@ class Model(dict):
             if type(b) is ButtonToggle:
                 if b.active:
                     b.func(self)
+                    self.update_plot()
             if type(b) is ButtonSlider:
                 self[b.variable] = b.get_value()
 
@@ -389,7 +408,7 @@ class Model(dict):
                 140,56,label,self,func))
 
     # Adds a button with a slider that can adjust a value associated with the model.
-    def add_slider_button(self, label, min, max):
+    def add_slider(self, label, min, max):
         button_count = len(self._buttons)
         self._buttons.add(
             ButtonSlider(
@@ -397,6 +416,11 @@ class Model(dict):
                 16+math.floor(button_count/2)*76,
                 140,56,label,self,min,max))
 
+
+    def run(self):
+        pyglet.app.run()
+
+        
 # Should not be created directly by the user.
 # Instead instantiate using model.add_single_button.
 class Button():
@@ -803,6 +827,3 @@ class Graph():
         self._batch.draw()
 
 AgentWindow = pyglet.window.Window(width=800,height=400)
-
-def Start():
-    pyglet.app.run()

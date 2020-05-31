@@ -1,55 +1,64 @@
-import agents as ag
+import random
+from agents import *
 
-class Electron(ag.Agent):
+
+class Electron(Agent):
     def setup(self, model):
         self.size = 5
-        self.set_color(0,0,255)
-        self.speed=model["speed"]
+        self.color = (0, 0, 255)
+        self.speed = model["speed"]
         self.direction = 180
         self.charged = False
 
     def step(self, model):
-        self.speed=model["speed"]
-        self.direction=180
-        if self.x < self.speed+self.size:
+        self.speed = model["speed"]
+        self.direction = 180
+        if self.x < self.speed + self.size:
             model["charge_flow"] += 1
-        for b in self.agents_nearby(distance=10,agent_type=Nucleon):
-            self.point_towards(b.x,b.y)
+        # If hitting a nucleus, point in the opposite direction of it
+        for b in self.agents_nearby(distance=10, agent_type=Nucleon):
+            self.point_towards(b.x, b.y)
             self.direction -= 180
+            self.direction += random.randrange(-1,2)
         self.forward()
 
-class Nucleon(ag.Agent):
+class Nucleon(Agent):
     def setup(self, model):
         self.size = 10
-        self.set_color(255,0,0)
+        self.color = (255, 0, 0)
 
     def step(self, model):
         pass
 
 def setup(model):
-    model.reset()
+    model.reset() # can this be made implicit?
     model["speed"] = 2
     model["charge_flow"] = 0
-    electrons = set([Electron() for i in range(200)])
-    model.add_agents(electrons)
-    nucleons = set([Nucleon() for i in range(50)])
-    model.add_agents(nucleons)
-    for agent in model.get_agents():
+
+    # Add agents
+    for i in range(200):
+        model.add_agent(Electron())
+    for i in range(50):
+        model.add_agent(Nucleon())
+
+    # Setup agents (make this implicit?)
+    for agent in model.agents():
         agent.setup(model)
-    for tile in model.get_all_tiles():
-        tile.set_color(100,100,100)
+
+    # Setup tiles
+    for tile in model.tiles():
+        tile.color = (100, 100, 100)
 
 def step(model):
     old_charge_flow = model["charge_flow"]
     model["charge_flow"] = 0
-    for agent in model.get_agents():
+    for agent in model.agents():
         agent.step(model)
     model["charge_flow"] = model["charge_flow"] * 0.01 + old_charge_flow * 0.99 
-    model.update_plot()
 
-modello = ag.Model(400,200,50,25)
+modello = Model(50, 25)
 modello.add_single_button("Setup", setup)
 modello.add_toggle_button("Go", step)
-modello.add_slider_button("speed",0.1,3)
-modello.plot_variable("charge_flow",100,100,250)
-ag.Start()
+modello.add_slider("Speed", 0.1, 3)
+modello.plot_variable("charge_flow", 100, 100, 250)
+modello.run()
