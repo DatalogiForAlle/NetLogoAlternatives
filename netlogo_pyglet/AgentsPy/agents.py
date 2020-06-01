@@ -24,6 +24,8 @@ class Clickable():
         self.y = y
         self.w = w
         self.h = h
+        self.mx = 0
+        self.my = 0
         self.state = 0 # 0=default | 1=mouse_hovering | 2=mouse_clicking
         self.mouse_hover = False
         self.mouse_pressed = False
@@ -58,7 +60,7 @@ class Clickable():
             self.state = 0
             self.clickable_none()
 
-    def mouse_moved(self,mx,my):
+    def mouse_update(self,mx,my):
         self.mouse_hover = ((self.x < mx)
                             and (mx < self.x + self.w)
                             and (self.y < my)
@@ -89,6 +91,7 @@ class Agent(Clickable):
         self.direction = random.randint(0,359)
         self.speed = 1
         self.show_direction = False
+        self.highlighted = False
         super().__init__(self.x,self.y,self.size,self.size)
 
     def __render_x(self):
@@ -136,6 +139,8 @@ class Agent(Clickable):
     # Does not actually perform the drawing! This is done by calling .draw()
     # on the batch that contains the vertex list.
     def render(self):
+        if self.highlighted:
+            self.set_color(255,255,255)
         x = self.__render_x()
         y = self.__render_y()
         d = math.radians(self.direction)
@@ -251,16 +256,19 @@ class Agent(Clickable):
     def set_color(self, r, g, b):
         self.__color = [r,g,b]
 
+    def mouse_update(self,mx,my):
+        self.mouse_hover = ((self.x - self.size < mx)
+                            and (mx < self.x + self.size)
+                            and (self.y - self.size < my)
+                            and (my < self.y + self.size))
+
     def clickable_update(self):
         self.w = self.size
         self.h = self.size
         super().clickable_update()
 
-    def clickable_none(self):
-        pass
-
-    def clickable_hover(self):
-        self.set_color(255,255,255)
+    def on_click(self):
+        self.highlighted = True
 
 class Tile():
     def __init__(self,x,y,w,h,area):
@@ -389,9 +397,20 @@ class Model(dict):
                      250, 240, 230,
                      250, 240, 230))
         )
+        self.__highlighter = self.__area.batch.add_indexed(
+            0, pyglet.gl.GL_LINE_STRIP,
+            pyglet.graphics.OrderedGroup(1000),
+            [],
+            ('v2f', []),
+            ('c3B', [])
+        )
         self._graph = Graph(440,248,300,132,self)
         self.reset()
         pyglet.clock.schedule_interval(self.update, 0.02)
+
+        # Mouse coordinates, used for updating clickables.
+        self.mx = 0
+        self.my = 0
 
         # These can only be declared once, so technically,
         # only one model can be active/functional at a time.
@@ -402,10 +421,8 @@ class Model(dict):
 
         @AgentWindow.event
         def on_mouse_motion(x, y, dx, dy):
-            for a in self.get_agents():
-                a.mouse_moved(x,y)
-            for b in self._buttons:
-                b.mouse_moved(x,y)
+            self.mx = x
+            self.my = y
 
         @AgentWindow.event
         def on_mouse_press(x, y, button, modifiers):
@@ -417,16 +434,15 @@ class Model(dict):
 
         @AgentWindow.event
         def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
-            for a in self.get_agents():
-                a.mouse_moved(x,y)
-            for b in self._buttons:
-                b.mouse_moved(x,y)
+            self.mx = x
+            self.my = y
 
         @AgentWindow.event
         def on_mouse_release(x, y, button, modifiers):
             if button == mouse.LEFT:
                 for a in self.get_agents():
-                    a.mouse_pressed = True
+                    a.highlighted = False
+                    a.mouse_pressed = False
                 for b in self._buttons:
                     b.mouse_pressed = False
 
@@ -507,12 +523,14 @@ class Model(dict):
     # Renders all entities associated with the internal rendering batch.
     # Also renders the graph.
     def render(self):
+        for a in self.get_agents():
+            a.mouse_update(self.mx,self.my)
+            a.clickable_update()
         for b in self._buttons:
+            b.mouse_update(self.mx,self.my)
             b.clickable_update()
             if type(b) is ButtonSlider:
                 self[b.variable] = b.get_value()
-        for a in self.get_agents():
-            a.clickable_update()
         self.__area.render()
         self._render_batch.draw()
         self._graph.render()
@@ -659,8 +677,9 @@ class SliderHandle(Button):
                      150, 150, 150,
                      150, 150, 150))
         )
+        self.follow_mouse = False
 
-    def mouse_moved(self,mx,my):
+    def mouse_update(self,mx,my):
         self.mouse_hover = ((self.x+(self.sliderW*self.r/100)-self.w/2 < mx)
                             and (mx < self.x+(self.sliderW*self.r/100) + self.w/2)
                             and (self.y-self.h/2 < my)
@@ -761,8 +780,8 @@ class ButtonSlider(Button):
                      255,255,255))
         )
 
-    def mouse_moved(self,mx,my):
-        self.slider.mouse_moved(mx,my)
+    def mouse_update(self,mx,my):
+        self.slider.mouse_update(mx,my)
 
     def clickable_update(self):
         self.slider.mouse_pressed = self.mouse_pressed
