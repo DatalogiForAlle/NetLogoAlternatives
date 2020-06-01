@@ -18,7 +18,53 @@ class Color():
 
     color = property(get_color,set_color)
 
-class Agent():
+class Clickable():
+    def __init__(self, x, y, w, h):
+        self.x = x
+        self.y = y
+        self.w = w
+        self.h = h
+        self.state = 0 # 0=default | 1=mouse_hovering | 2=mouse_clicking
+        self.mouse_hover = False
+        self.mouse_pressed = False
+
+    def clickable_none(self):
+        pass
+    def clickable_hover(self):
+        pass
+    def clickable_click(self):
+        pass
+    def on_click(self):
+        pass
+
+    def clickable_update(self):
+        if self.state == 0 and self.mouse_hover:
+            self.state = 1
+            self.clickable_hover()
+        elif self.state == 1 and self.mouse_hover:
+            if self.mouse_pressed:
+                self.state = 2
+                self.clickable_click()
+            else:
+                self.clickable_hover()
+        elif self.state == 2 and self.mouse_hover:
+            if self.mouse_pressed:
+                self.clickable_click()
+            else:
+                self.state = 0
+                self.on_click()
+                self.clickable_hover()
+        else:
+            self.state = 0
+            self.clickable_none()
+
+    def mouse_moved(self,mx,my):
+        self.mouse_hover = ((self.x < mx)
+                            and (mx < self.x + self.w)
+                            and (self.y < my)
+                            and (my < self.y + self.h))
+
+class Agent(Clickable):
     def __init__(self):
         # Associated simulation area.
         self.__area = None
@@ -39,10 +85,11 @@ class Agent():
 
         self.x = 0
         self.y = 0
-        self.size = 10
+        self.size = 1
         self.direction = random.randint(0,359)
         self.speed = 1
         self.show_direction = False
+        super().__init__(self.x,self.y,self.size,self.size)
 
     def __render_x(self):
         return self.__area.x + self.x
@@ -204,6 +251,17 @@ class Agent():
     def set_color(self, r, g, b):
         self.__color = [r,g,b]
 
+    def clickable_update(self):
+        self.w = self.size
+        self.h = self.size
+        super().clickable_update()
+
+    def clickable_none(self):
+        pass
+
+    def clickable_hover(self):
+        self.set_color(255,255,255)
+
 class Tile():
     def __init__(self,x,y,w,h,area):
         self.x = x
@@ -303,53 +361,6 @@ class SimulationArea():
             a.render()
         self.batch.draw()
 
-class Clickable():
-    def __init__(self, x, y, w, h):
-        self._x = x
-        self._y = y
-        self._w = w
-        self._h = h
-        self.state = 0 # 0=default | 1=mouse_hovering | 2=mouse_clicking
-        self.mouse_hover = False
-        self.mouse_pressed = False
-
-    def clickable_none(self):
-        pass
-    def clickable_hover(self):
-        pass
-    def clickable_click(self):
-        pass
-
-    def clickable_update(self):
-        if self.state == 0 and self.mouse_hover:
-            self.state = 1
-            self.clickable_hover()
-        elif self.state == 1 and self.mouse_hover:
-            if self.mouse_pressed:
-                self.state = 2
-                self.clickable_click()
-            else:
-                self.render_hover()
-        elif self.state == 2 and self.mouse_hover:
-            if self.mouse_pressed:
-                self.clickable_click()
-            else:
-                self.state = 0
-                self.on_click()
-                self.clickable_hover()
-        else:
-            self.state = 0
-            self.clickable_none()
-
-    def mouse_moved(self,mx,my):
-        self.mouse_hover = ((self._x < mx)
-                            and (mx < self._x + self._w)
-                            and (self._y < my)
-                            and (my < self._y + self._h))
-
-    def on_click(self):
-        pass
-
 class Model(dict):
     def __init__(self, width, height, x_tiles, y_tiles):
         global AgentWindow
@@ -391,23 +402,31 @@ class Model(dict):
 
         @AgentWindow.event
         def on_mouse_motion(x, y, dx, dy):
+            for a in self.get_agents():
+                a.mouse_moved(x,y)
             for b in self._buttons:
                 b.mouse_moved(x,y)
 
         @AgentWindow.event
         def on_mouse_press(x, y, button, modifiers):
             if button == mouse.LEFT:
+                for a in self.get_agents():
+                    a.mouse_pressed = True
                 for b in self._buttons:
                     b.mouse_pressed = True
 
         @AgentWindow.event
         def on_mouse_drag(x, y, dx, dy, buttons, modifiers):
+            for a in self.get_agents():
+                a.mouse_moved(x,y)
             for b in self._buttons:
                 b.mouse_moved(x,y)
 
         @AgentWindow.event
         def on_mouse_release(x, y, button, modifiers):
             if button == mouse.LEFT:
+                for a in self.get_agents():
+                    a.mouse_pressed = True
                 for b in self._buttons:
                     b.mouse_pressed = False
 
@@ -492,6 +511,8 @@ class Model(dict):
             b.clickable_update()
             if type(b) is ButtonSlider:
                 self[b.variable] = b.get_value()
+        for a in self.get_agents():
+            a.clickable_update()
         self.__area.render()
         self._render_batch.draw()
         self._graph.render()
@@ -534,10 +555,10 @@ class Button(Clickable):
         self.vertex_list = model.get_render_batch().add_indexed(
             4, pyglet.gl.GL_TRIANGLES, model.get_button_group(),
             [0, 1, 2, 0, 2, 3],
-            ('v2i', (self._x, self._y,
-                     self._x+self._w, self._y,
-                     self._x+self._w, self._y+self._h,
-                     self._x, self._y+self._h)),
+            ('v2i', (self.x, self.y,
+                     self.x+self.w, self.y,
+                     self.x+self.w, self.y+self.h,
+                     self.x, self.y+self.h)),
             ('c3B', (150, 150, 150,
                      100, 100, 100,
                      150, 150, 150,
@@ -547,7 +568,7 @@ class Button(Clickable):
             label,
             font_name='Courier New',
             font_size=12,
-            x=self._x+self._w/2, y=self._y+self._h/2,
+            x=self.x+self.w/2, y=self.y+self.h/2,
             anchor_x='center', anchor_y='center',
             batch=model.get_render_batch(),
             color=(0,0,0,255),
@@ -584,11 +605,11 @@ class ButtonToggle(Button):
         self._led_vertex_list = model.get_render_batch().add_indexed(
             5, pyglet.gl.GL_TRIANGLES, model.get_label_group(),
             [0,1,2,0,2,3,0,3,4,0,4,1],
-            ('v2f', (self._x+self._w-15, self._y+self._h-15,
-                     self._x+self._w-15, self._y+self._h-5,
-                     self._x+self._w-5, self._y+self._h-15,
-                     self._x+self._w-15,self._y+self._h-25,
-                     self._x+self._w-25,self._y+self._h-15)),
+            ('v2f', (self.x+self.w-15, self.y+self.h-15,
+                     self.x+self.w-15, self.y+self.h-5,
+                     self.x+self.w-5, self.y+self.h-15,
+                     self.x+self.w-15,self.y+self.h-25,
+                     self.x+self.w-25,self.y+self.h-15)),
             ('c3B', (0,100,0,
                      0,25,0,
                      0,25,0,
@@ -623,7 +644,9 @@ class SliderHandle(Button):
     def __init__(self, x, y, w, model):
         super().__init__(x, y, w, 18, "", model, None)
         self.sliderW = w
+        self.w = 18
         self.r = 50
+        self.vertex_list.delete()
         self._vertex_list = model.get_render_batch().add_indexed(
             4, pyglet.gl.GL_TRIANGLES, model.get_label_group(),
             [0, 1, 2, 0, 2, 3],
@@ -651,7 +674,8 @@ class SliderHandle(Button):
                 self.r = (mx - self.x) * 100 / self.sliderW
 
     def clickable_update(self):
-        self.follow_mouse = False
+        if not self.mouse_pressed:
+            self.follow_mouse = False
         super().clickable_update()
         self._vertex_list.vertices = [
             self.x+(self.sliderW*self.r/100)-self.w/2, self.y+self.h/2,
@@ -685,12 +709,15 @@ class SliderHandle(Button):
         ]
         self.follow_mouse = True
 
+    def on_click(self):
+        pass
+
 # Should not be created directly by the user.
 # Instead instantiate using model.add_slider_button.
 class ButtonSlider(Button):
     def __init__(self, x, y, w, h, label, model, min, max):
         super().__init__(x, y, w, h, label, model, None)
-        self.slider = SliderHandle(self._x+5, self._y+15, self._w-10, model)
+        self.slider = SliderHandle(self.x+5, self.y+15, self.w-10, model)
         self.min = min
         self.max = max
         self.variable = label
@@ -699,7 +726,7 @@ class ButtonSlider(Button):
             label,
             font_name='Courier New',
             font_size=10,
-            x=self._x+self._w/2, y=self._y+3*self._h/4,
+            x=self.x+self.w/2, y=self.y+3*self.h/4,
             anchor_x='center', anchor_y='center',
             batch=model.get_render_batch(),
             color=(0,0,0,255),
@@ -709,7 +736,7 @@ class ButtonSlider(Button):
             str(self.min),
             font_name='Courier New',
             font_size=8,
-            x=self._x+10, y=self._y+3*self._h/4-5,
+            x=self.x+10, y=self.y+3*self.h/4-5,
             anchor_x='center', anchor_y='center',
             batch=model.get_render_batch(),
             color=(0,0,0,255),
@@ -719,7 +746,7 @@ class ButtonSlider(Button):
             str(self.max),
             font_name='Courier New',
             font_size=8,
-            x=self._x+self._w-10, y=self._y+3*self._h/4-5,
+            x=self.x+self.w-10, y=self.y+3*self.h/4-5,
             anchor_x='center', anchor_y='center',
             batch=model.get_render_batch(),
             color=(0,0,0,255),
@@ -728,8 +755,8 @@ class ButtonSlider(Button):
         model.get_render_batch().add_indexed(
             2, pyglet.gl.GL_LINES, model.get_button_group(),
             [0,1],
-            ('v2f', [self._x+5, self._y+15,
-                     self._x+self._w-5, self._y+15]),
+            ('v2f', [self.x+5, self.y+15,
+                     self.x+self.w-5, self.y+15]),
             ('c3B', (255,255,255,
                      255,255,255))
         )
@@ -739,8 +766,8 @@ class ButtonSlider(Button):
 
     def clickable_update(self):
         self.slider.mouse_pressed = self.mouse_pressed
-        self.render_default()
-        self.slider.update()
+        self.clickable_none()
+        self.slider.clickable_update()
 
     def get_value(self):
         return self.min + (self.max - self.min) * self.slider.r / 100
