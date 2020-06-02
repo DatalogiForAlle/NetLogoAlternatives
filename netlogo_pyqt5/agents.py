@@ -3,6 +3,9 @@ import math
 import random
 from PyQt5 import QtCore, QtWidgets, QtGui
 
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from matplotlib.figure import Figure
+
 def RNG(maximum):
     return random.randint(0,maximum)
 
@@ -115,7 +118,10 @@ class Tile():
 
 
 class Model:
-    def __init__(self, x_tiles, y_tiles, tile_size=8):
+    def __init__(self, title, x_tiles, y_tiles, tile_size=8):
+        # Title of model, shown in window title
+        self.title = title
+
         # Number of tiles on the x/y axis.
         self.x_tiles = x_tiles
         self.y_tiles = y_tiles
@@ -135,7 +141,7 @@ class Model:
 
         # Initialize application
         self.qapp = QtWidgets.QApplication(sys.argv)
-        self.myapp = Application()
+        self.myapp = Application(self.title)
 
         self.variables = {}
 
@@ -164,12 +170,20 @@ class Model:
     def add_button(self, label, func):
         self.myapp.add_button(label, func, self)
 
+    def add_toggle_button(self, label, func):
+        self.myapp.add_toggle(label, func, self)
+
+    def add_slider(self, variable, minval, maxval, initial):
+        self.myapp.add_slider(variable, minval, maxval, initial, self)
+
     def run(self):
+        # TODO: move run function to a module-level agents.run(model)
+        # method to separate UI and model completely
         self.myapp.simulation_area.model = self
-        
+
         # Launch the application
         self.qapp.exec_()
-        
+
         # Application was closed, clean up and exit
         sys.exit(0)
 
@@ -186,12 +200,11 @@ class Model:
 class SimulationArea(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.setFixedSize(400, 400)
         self.__model = None
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update)
         self.timer.start(1000/60)
-        
+
     @property
     def model(self):
         return self.__model
@@ -210,7 +223,7 @@ class SimulationArea(QtWidgets.QWidget):
         white = QtGui.QColor('white')
         painter.setBrush(white)
         painter.drawRect(0, 0, painter.device().width(), painter.device().height())
-        
+
         if self.model:
             # Draw tiles
             for tile in self.model.tiles:
@@ -232,48 +245,99 @@ class SimulationArea(QtWidgets.QWidget):
         y = self.model.tile_size * tile.y
         painter.drawRect(x, y, self.model.tile_size, self.model.tile_size)
 
-                
-class Plot(QtWidgets.QPushButton):
-    def __init__(self):
-        super().__init__()
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred,
-                                           QtWidgets.QSizePolicy.Preferred)
-        sizePolicy.setHeightForWidth(True)
-        self.setSizePolicy(sizePolicy)
-        self.setMinimumWidth(300)
-        self.setText("Plot")
+class Plot(FigureCanvasQTAgg):
+    # TODO: Connect with data, just shows random data
+    def __init__(self, parent=None):
+        self.figure = Figure()
+        super(Plot, self).__init__(self.figure)
+        self.setParent(parent)
+        self.setMinimumWidth(400)
+        self.setMinimumHeight(230)
 
-    def heightForWidth(self, w):
-        return w / 1.6
+    def plot(self):
+        ''' plot some random stuff '''
+        # random data
+        data = [random.random() for i in range(10)]
+
+        # create an axis
+        ax = self.figure.add_subplot(111)
+
+        # discards the old graph
+        ax.clear()
+
+        # plot data
+        ax.plot(data, '*-')
+
+        # refresh canvas
+        self.draw()
+
+
+class ToggleButton(QtWidgets.QPushButton):
+    def __init__(self, text, func, model):
+        super().__init__(text)
+        self.toggled.connect(self.on_toggle)
+        self.setCheckable(True)
+        self.model = model
+        self.func = func
+        self.timer = QtCore.QTimer()
+        self.timer.timeout.connect(lambda: self.func(model))
+
+    def on_toggle(self, checked):
+        if checked:
+            self.timer.start(1000/60)
+        else:
+            self.timer.stop()
+
+class Slider(QtWidgets.QSlider):
+    def __init__(self, variable, minval, maxval, initial):
+        super().__init__(QtCore.Qt.Horizontal)
+        self.setMinimum(minval)
+        self.setMaximum(maxval)
+        self.setValue(initial)
+
+    # TODO: Support floats. See https://stackoverflow.com/a/50300848/
+
 
 class Application():
-    def __init__(self):
+    def __init__(self, title):
         self.controller_rows = []
         self.plots = []
-        self.initializeUI()
+        self.initializeUI(title)
         self.add_controller_row()
-        # self.add_slider()
-        # self.add_plot()
-        # self.add_plot()
+        self.add_plot()
 
     def add_controller_row(self):
         self.current_row = QtWidgets.QHBoxLayout()
         self.controller_box.addLayout(self.current_row)
         self.controller_rows.append(self.current_row)
-        
+
     def add_button(self, text, func, model):
         btn = QtWidgets.QPushButton(text)
         btn.clicked.connect(lambda x: func(model))
         self.current_row.addWidget(btn)
 
+    def add_toggle(self, text, func, model):
+        btn = ToggleButton(text, func, model)
+        #btn.clicked.connect(lambda x: func(model))
+        self.current_row.addWidget(btn)
+
+    def add_slider(self, variable, minval, maxval, initial, model):
+        slider = Slider(variable, minval, maxval, initial)
+        def update_variable(v):
+            model[variable] = v
+        slider.valueChanged.connect(update_variable)
+        self.current_row.addWidget(slider)
+
     def add_plot(self):
         plot = Plot()
+        plot.plot()
         self.plots.append(plot)
         self.plots_box.addWidget(plot)
-        
-    def initializeUI(self):
+
+    def initializeUI(self, title):
         # Initialize main window and central widget
-        self.mainwindow = QtWidgets.QMainWindow()        
+        self.mainwindow = QtWidgets.QMainWindow()
+        self.mainwindow.setWindowTitle(title)
         self.centralwidget = QtWidgets.QWidget(self.mainwindow)
         self.mainwindow.setCentralWidget(self.centralwidget)
 
@@ -291,7 +355,7 @@ class Application():
         self.horizontal_divider.addLayout(self.right_box)
         self.right_box.addLayout(self.plots_box)
         self.right_box.addStretch(1)
-        
+
         # Simulation area
         self.simulation_area = SimulationArea()
         self.left_box.addWidget(self.simulation_area)
@@ -300,5 +364,5 @@ class Application():
         self.controller_box = QtWidgets.QVBoxLayout()
         self.left_box.addLayout(self.controller_box)
         self.left_box.addStretch(1)
-        
+
         self.mainwindow.show()

@@ -54,12 +54,12 @@ def step(model):
     model["charge_flow"] = 0
     for agent in model.agents:
         agent.step(model)
-    model["charge_flow"] = model["charge_flow"] * 0.01 + old_charge_flow * 0.99 
+    model["charge_flow"] = model["charge_flow"] * 0.01 + old_charge_flow * 0.99
 
-modello = Model(50, 25)
+modello = Model("Electricity", 50, 25)
 modello.add_button("Setup", setup)
 modello.add_button("Step", step)
-#modello.add_toggle_button("Go", step)
-#modello.add_slider("Speed", 0.1, 3)
+modello.add_toggle_button("Go", step)
+modello.add_slider("speed", 0.1, 3, 2)
 #modello.plot_variable("charge_flow", 100, 100, 250)
 modello.run()
