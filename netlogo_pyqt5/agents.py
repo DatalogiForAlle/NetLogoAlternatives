@@ -116,6 +116,37 @@ class Tile():
         # Associated model.
         self.__model = model
 
+class Spec():
+    pass
+
+class ButtonSpec(Spec):
+    def __init__(self, label, function):
+        self.label = label
+        self.function = function
+
+class ToggleSpec(Spec):
+    def __init__(self, label, function):
+        self.label = label
+        self.function = function
+
+class SliderSpec(Spec):
+    def __init__(self, variable, minval, maxval, initial):
+        self.variable = variable
+        self.minval = minval
+        self.maxval = maxval
+        self.initial = initial
+
+class SliderSpec(Spec):
+    def __init__(self, variable, minval, maxval, initial):
+        self.variable = variable
+        self.minval = minval
+        self.maxval = maxval
+        self.initial = initial
+
+class PlotSpec(Spec):
+    def __init__(self, variable, color):
+        self.variable = variable
+        self.color = color
 
 class Model:
     def __init__(self, title, x_tiles, y_tiles, tile_size=8):
@@ -139,12 +170,10 @@ class Model:
                       for y in range(y_tiles)
                       for x in range(x_tiles)]
 
-        # Initialize application
-        self.qapp = QtWidgets.QApplication(sys.argv)
-        self.myapp = Application(self.title)
-
         self.variables = {}
-
+        self.plots = []
+        self.controller_rows = []
+        self.add_controller_row()
 
     def add_agent(self, agent):
         agent.set_model(self)
@@ -167,25 +196,21 @@ class Model:
                 self.tiles[i].color = (0,0,0)
                 self.tiles[i].info = {}
 
+    def add_controller_row(self):
+        self.current_row = []
+        self.controller_rows.append(self.current_row)
+
     def add_button(self, label, func):
-        self.myapp.add_button(label, func, self)
+        self.current_row.append(ButtonSpec(label, func))
 
     def add_toggle_button(self, label, func):
-        self.myapp.add_toggle(label, func, self)
+        self.current_row.append(ToggleSpec(label, func))
 
     def add_slider(self, variable, minval, maxval, initial):
-        self.myapp.add_slider(variable, minval, maxval, initial, self)
+        self.current_row.append(SliderSpec(variable, minval, maxval, initial))
 
-    def run(self):
-        # TODO: move run function to a module-level agents.run(model)
-        # method to separate UI and model completely
-        self.myapp.simulation_area.model = self
-
-        # Launch the application
-        self.qapp.exec_()
-
-        # Application was closed, clean up and exit
-        sys.exit(0)
+    def plot_variable(self, variable, color):
+        self.plots.append(PlotSpec(variable, color))
 
     def __setitem__(self, key, item):
         self.variables[key] = item
@@ -299,45 +324,16 @@ class Slider(QtWidgets.QSlider):
 
 
 class Application():
-    def __init__(self, title):
-        self.controller_rows = []
-        self.plots = []
-        self.initializeUI(title)
-        self.add_controller_row()
-        self.add_plot()
+    def __init__(self, model):
+        # self.controller_rows = []
+        # self.plots = []
+        self.model = model
+        self.initializeUI()
 
-    def add_controller_row(self):
-        self.current_row = QtWidgets.QHBoxLayout()
-        self.controller_box.addLayout(self.current_row)
-        self.controller_rows.append(self.current_row)
-
-    def add_button(self, text, func, model):
-        btn = QtWidgets.QPushButton(text)
-        btn.clicked.connect(lambda x: func(model))
-        self.current_row.addWidget(btn)
-
-    def add_toggle(self, text, func, model):
-        btn = ToggleButton(text, func, model)
-        #btn.clicked.connect(lambda x: func(model))
-        self.current_row.addWidget(btn)
-
-    def add_slider(self, variable, minval, maxval, initial, model):
-        slider = Slider(variable, minval, maxval, initial)
-        def update_variable(v):
-            model[variable] = v
-        slider.valueChanged.connect(update_variable)
-        self.current_row.addWidget(slider)
-
-    def add_plot(self):
-        plot = Plot()
-        plot.plot()
-        self.plots.append(plot)
-        self.plots_box.addWidget(plot)
-
-    def initializeUI(self, title):
+    def initializeUI(self):
         # Initialize main window and central widget
         self.mainwindow = QtWidgets.QMainWindow()
-        self.mainwindow.setWindowTitle(title)
+        self.mainwindow.setWindowTitle(self.model.title)
         self.centralwidget = QtWidgets.QWidget(self.mainwindow)
         self.mainwindow.setCentralWidget(self.centralwidget)
 
@@ -358,6 +354,7 @@ class Application():
 
         # Simulation area
         self.simulation_area = SimulationArea()
+        self.simulation_area.model = self.model
         self.left_box.addWidget(self.simulation_area)
 
         # Controller box (bottom left)
@@ -365,4 +362,62 @@ class Application():
         self.left_box.addLayout(self.controller_box)
         self.left_box.addStretch(1)
 
+        self.add_controllers(self.model.controller_rows, self.controller_box)
         self.mainwindow.show()
+
+        # For some reason best to add matplotlib plots after the
+        # MainWindow is shown, otherwise the plot size isn't adjusted
+        # to the window size
+        self.add_plots(self.model.plots, self.plots_box)
+
+    def add_button(self, button_spec, row):
+        btn = QtWidgets.QPushButton(button_spec.label)
+        btn.clicked.connect(lambda x: button_spec.function(self.model))
+        row.addWidget(btn)
+
+    def add_toggle(self, toggle_spec, row):
+        btn = ToggleButton(toggle_spec.label, toggle_spec.function, self.model)
+        row.addWidget(btn)
+
+    def add_slider(self, slider_spec, row):
+        slider = Slider(slider_spec.variable, slider_spec.minval, slider_spec.maxval, slider_spec.initial)
+        def update_variable(v):
+            self.model[slider_spec.variable] = v
+        slider.valueChanged.connect(update_variable)
+        row.addWidget(slider)
+
+    def add_plot(self, plot_spec, plots_box):
+        # TODO Record data and display
+        plot = Plot()
+        plot.plot()
+        plots_box.addWidget(plot)
+
+    def add_controllers(self, rows, controller_box):
+        for row in rows:
+            # Create a horizontal box layout for this row
+            rowbox = QtWidgets.QHBoxLayout()
+            controller_box.addLayout(rowbox)
+
+            # Add controllers
+            for controller in row:
+                if isinstance(controller, ButtonSpec):
+                    self.add_button(controller, rowbox)
+                elif isinstance(controller, ToggleSpec):
+                    self.add_toggle(controller, rowbox)
+                elif isinstance(controller, SliderSpec):
+                    self.add_slider(controller, rowbox)
+
+    def add_plots(self, plots, plots_box):
+        for plot_spec in plots:
+            self.add_plot(plot_spec, plots_box)
+
+def run(model):
+    # Initialize application
+    qapp = QtWidgets.QApplication(sys.argv)
+    myapp = Application(model)
+
+    # Launch the application
+    qapp.exec_()
+
+    # Application was closed, clean up and exit
+    sys.exit(0)
